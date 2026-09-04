@@ -699,6 +699,8 @@ HELP_FIELDS = [
     ("🔍 이모지 확대",
      "서버 이모지만 **달랑** 보내봐. 이몸이 크게 띄워준다! (한 번에 3개까지, 움직이는 것도 OK)\n"
      "`/이모지 이모지:😎` 로 직접 시켜도 돼. 기본 이모지는 못 키워, 서버 이모지만!"),
+    ("👊 /구타",
+     "이몸이 구타한다! `대상:@누구` 붙이면 그 녀석을! 안 붙이면… 네가 맞는 거야!"),
     ("👑 관리자 전용",
      "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
      "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에 / `/이모지확대 켜기|끄기`"),
@@ -876,6 +878,52 @@ async def emoji_toggle_cmd(inter: discord.Interaction, 상태: app_commands.Choi
     setting_set("emoji_enlarge", 상태.value)
     text = "이모지 확대 켰어! 이모지만 보내면 이몸이 키워준다!" if 상태.value == "1" else "이모지 확대 껐어! 이제 안 키워준다!"
     await inter.response.send_message(f"{inter.user.mention} {text} {kao()}")
+
+
+# ───────────────────────── 구타 ─────────────────────────
+BEAT_SOUNDS = [
+    "우다다다다다!", "퍽퍽퍽퍽퍽!", "빠악! 빠악!", "두두두두두!", "탕탕탕탕!", "퍼버버벅!",
+    "쾅! 쾅! 쾅!", "우당탕탕!", "빡! 빡! 빡!", "퍽! 퍼억! 퍽!", "따다다다닥!", "쿵쾅쿵쾅!",
+    "슈바바바밧!", "휘리릭 퍽!", "뿌직! 퍽퍽!", "촤라라락 빡!",
+]
+BEAT_LINES = [
+    "이몸이 용서 못 해~! 죽어죽어! (사랑해💗)",
+    "감히 이몸을 귀찮게 해?! 받아라! (…미워하는 건 아니야💗)",
+    "반성해! 반성하라고! (오늘도 귀여워💗)",
+    "이건 애정의 구타야! 알겠냐! 💗",
+    "죽어! 죽어! …아 죽으면 안 되지, 살아! 💗",
+    "이몸의 분노를 받아라~! (살살 했어💗)",
+    "흥! 다음에 또 그러면 진짜 화낸다! (거짓말💗)",
+    "너 같은 녀석은… 너 같은 녀석은…! 좋아해! 💗",
+    "아프냐?! 이몸은 더 아프다! (마음이💗)",
+    "멍청이! 바보! 얼간이! …사랑해💗",
+    "이거나 먹어! 사랑의 주먹밥! 💗",
+    "츤! 츤! 츤! (데레는 없어… 있어💗)",
+]
+BEAT_KAO = [
+    "(ノ°益°)ノ", "(╬ Ò﹏Ó)", "(ง'̀-'́)ง", "ヽ(`Д´)ﾉ", "(ノ`Д´)ノ彡┻━┻", "(╯°□°)╯︵ ┻━┻",
+    "(#`皿´)", "(ﾉ≧∇≦)ﾉ ﾐ ┸━┸", "٩(╬ʘ益ʘ╬)۶", "(ᗒᗣᗕ)՞", "(｀皿´#)", "ᕙ(⇀‸↼‶)ᕗ", "(๑•̀ㅂ•́)و✧",
+]
+BEAT_VICTIM = ["(´；ω；`)", "(×_×)", "(ㅠ﹏ㅠ)", "( ˃̣̣̥⌓˂̣̣̥)", "(;´д`)", "(´-ω-`)", "(⊙_⊙;)", "(っ˘̩╭╮˘̩)っ"]
+
+
+def beat_text(attacker: str, victim: str) -> str:
+    sounds = random.sample(BEAT_SOUNDS, k=random.randint(2, 3))
+    big = "\n".join(f"# {snd} {random.choice(BEAT_KAO)}" for snd in sounds)
+    line = random.choice(BEAT_LINES)
+    return f"{big}\n**{victim}** {random.choice(BEAT_VICTIM)}\n{line} {random.choice(BEAT_KAO)}"
+
+
+@client.tree.command(name="구타", description="이몸이 구타한다!")
+@app_commands.describe(대상="맞을 녀석 (비우면 네가 맞는다)")
+async def beat_cmd(inter: discord.Interaction, 대상: Optional[discord.Member] = None):
+    victim = 대상.mention if 대상 and 대상.id != inter.user.id else inter.user.mention
+    if 대상 and 대상.id == client.user.id:
+        await inter.response.send_message(
+            f"{inter.user.mention} 뭐?! 이몸을 때리겠다고?! 역으로 간다!\n{beat_text('나', inter.user.mention)}"
+        )
+        return
+    await inter.response.send_message(beat_text(inter.user.mention, victim))
 
 
 @client.event
