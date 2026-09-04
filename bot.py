@@ -703,6 +703,9 @@ HELP_FIELDS = [
      "이몸이 구타한다! `대상:@누구` 붙이면 그 녀석을! 안 붙이면… 네가 맞는 거야!"),
     ("🏆 /개짱",
      "이몸이 극찬한다! `대상:@누구` 붙이면 그 녀석을! 안 붙이면… 네가 개짱인 거야! 흥!"),
+    ("⚔️ /대결",
+     "`상대:@누구` 랑 주사위(1d100) 대결! 진 녀석은 이몸이 **사형집행** — 랜덤 코디를 입는 처벌이다! "
+     "단보루 태그로 뽑아주니까 그대로 그려! 무승부면 둘 다 벌칙!"),
     ("👑 관리자 전용",
      "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
      "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에 / `/이모지확대 켜기|끄기`"),
@@ -979,6 +982,118 @@ async def praise_cmd(inter: discord.Interaction, 대상: Optional[discord.Member
         return
     target = 대상.mention if 대상 else inter.user.mention
     await inter.response.send_message(praise_text(target))
+
+
+# ───────────────────────── 대결 ─────────────────────────
+# (단보루 태그, 한글) — 벌칙 코디 풀
+W_COLORS = [
+    ("red", "빨간"), ("blue", "파란"), ("pink", "분홍"), ("black", "검정"), ("white", "하양"), ("purple", "보라"),
+    ("green", "초록"), ("yellow", "노랑"), ("orange", "주황"), ("gold", "금색"), ("silver", "은색"), ("mint", "민트"),
+    ("lavender", "라벤더"), ("navy", "네이비"), ("brown", "갈색"), ("sky_blue", "하늘색"), ("wine", "와인색"),
+]
+W_OUTFITS = [
+    ("maid_dress", "메이드복"), ("school_uniform", "교복"), ("sailor_uniform", "세일러복"), ("gothic_lolita", "고스로리"),
+    ("china_dress", "치파오"), ("kimono", "기모노"), ("yukata", "유카타"), ("nurse_uniform", "간호사복"),
+    ("wedding_dress", "웨딩드레스"), ("bunny_suit", "바니걸 슈트"), ("one-piece_swimsuit", "원피스 수영복"),
+    ("pajamas", "잠옷"), ("apron", "앞치마"), ("hoodie", "후드티"), ("track_jacket", "츄리닝 자켓"), ("tuxedo", "턱시도"),
+    ("military_uniform", "군복"), ("cheerleader", "치어리더복"), ("witch_costume", "마녀 코스튬"), ("santa_costume", "산타복"),
+    ("idol_costume", "아이돌 무대의상"), ("magical_girl", "마법소녀복"), ("sundress", "선드레스"), ("sweater_dress", "니트 원피스"),
+    ("turtleneck", "터틀넥"), ("crop_top", "크롭탑"), ("kigurumi", "동물 잠옷"), ("bodysuit", "보디슈트"), ("armor", "갑옷"),
+    ("miko", "무녀복"), ("cowboy_western", "카우보이 복장"), ("pirate_costume", "해적 코스튬"), ("waitress", "웨이트리스복"),
+    ("gym_uniform", "체육복"), ("ballet_dress", "발레복"), ("raincoat", "우비"), ("overalls", "멜빵바지"), ("cheongsam", "차이나 드레스"),
+    ("labcoat", "가운"), ("suit", "정장"), ("hanbok", "한복"), ("frilled_dress", "프릴 드레스"), ("cat_costume", "고양이 코스튬"),
+]
+W_LEGS = [
+    ("thighhighs", "니삭스"), ("pantyhose", "스타킹"), ("striped_thighhighs", "줄무늬 니삭스"), ("fishnets", "망사 스타킹"),
+    ("knee_socks", "무릎 양말"), ("loose_socks", "루즈삭스"), ("garter_straps", "가터벨트"), ("leg_warmers", "레그워머"),
+    ("boots", "부츠"), ("high_heels", "하이힐"), ("mary_janes", "메리제인 구두"), ("sneakers", "운동화"),
+]
+W_HEADS = [
+    ("cat_ears", "고양이 귀"), ("bunny_ears", "토끼 귀"), ("dog_ears", "강아지 귀"), ("fox_ears", "여우 귀"),
+    ("hair_ribbon", "머리 리본"), ("hairband", "헤어밴드"), ("beret", "베레모"), ("witch_hat", "마녀 모자"), ("tiara", "티아라"),
+    ("halo", "천사 고리"), ("headphones", "헤드폰"), ("nurse_cap", "간호사 캡"), ("straw_hat", "밀짚모자"), ("baseball_cap", "야구모자"),
+    ("flower_crown", "화관"), ("horns", "뿔"), ("maid_headdress", "메이드 머리장식"), ("crown", "왕관"), ("top_hat", "실크햇"),
+    ("animal_hood", "동물 후드"), ("goggles_on_head", "머리 위 고글"), ("hair_flower", "머리 꽃"),
+]
+W_ACCS = [
+    ("glasses", "안경"), ("choker", "초커"), ("bell", "방울"), ("necktie", "넥타이"), ("bowtie", "나비넥타이"), ("scarf", "목도리"),
+    ("gloves", "장갑"), ("elbow_gloves", "긴 장갑"), ("earrings", "귀걸이"), ("bracelet", "팔찌"), ("wings", "날개"), ("tail", "꼬리"),
+    ("umbrella", "우산"), ("mask", "마스크"), ("eyepatch", "안대"), ("bandaid_on_face", "얼굴 반창고"), ("cape", "망토"),
+    ("wrist_cuffs", "손목 커프스"), ("collar", "목줄"), ("shoulder_bag", "숄더백"), ("sunglasses", "선글라스"), ("necklace", "목걸이"),
+    ("hair_bell", "머리 방울"), ("ribbon_choker", "리본 초커"), ("detached_sleeves", "분리형 소매"), ("pom_pom_(clothes)", "털방울 장식"),
+]
+W_EXTRAS = [
+    ("twintails", "트윈테일"), ("ponytail", "포니테일"), ("drill_hair", "드릴 머리"), ("braid", "땋은 머리"), ("ahoge", "아호게"),
+    ("blush", "홍조"), ("holding_cake", "케이크 들고"), ("holding_sword", "검 들고"), ("holding_umbrella", "우산 들고"),
+    ("sparkle", "반짝반짝 이펙트"), ("wet", "흠뻑 젖은 채로"), ("heart_hair_ornament", "하트 머리핀"), ("star_hair_ornament", "별 머리핀"),
+    ("peace_sign", "브이 포즈"), ("crying", "울면서"), ("angry", "화난 얼굴로"), ("embarrassed", "부끄러워하며"), ("sleepy", "졸린 얼굴로"),
+    ("holding_stuffed_toy", "인형 안고"), ("wind_lift", "바람에 날리며"), ("cat_pose", "고양이 포즈"), ("salute", "경례하며"),
+]
+BATTLE_INTRO = [
+    "이몸이 심판이다! 주사위 굴려! 우다다다!", "싸움이냐?! 좋아, 이몸이 봐준다!", "대결 신청! 도망치면 그 자리에서 사형이야!",
+    "자, 주사위다! 하늘에 맡겨! (이몸은 안 봐줘)",
+]
+BATTLE_WIN = ["승리! 흥, 운이 좋았을 뿐이야!", "이겼다! …딱히 응원한 건 아니야!", "승자다! 오늘은 봐준다!", "우승! 자랑해도 돼, 오늘만!"]
+BATTLE_LOSE = ["패배! 사형집행 시간이다!", "졌다! 이몸의 처벌을 받아라!", "패자 확정! 도망칠 생각 마!", "끝났어! 벌칙 확정이야!"]
+BATTLE_TIE = ["무승부?! 그럼 둘 다 벌칙이다! 이몸이 정했어!", "동점! 봐주는 건 없어, 둘 다 사형집행!"]
+PUNISH_HEAD = [
+    "이 녀석은 당장 **{fit}** 을(를) 입는 처벌이다!", "판결! **{fit}** 착용형! 항소 불가!",
+    "형 집행! **{fit}** 입고 그려서 올려! 알겠냐!", "처벌 내용: **{fit}**! 이몸이 직접 골랐다!",
+]
+PUNISH_KAO = ["(ノ°益°)ノ", "(╬ Ò﹏Ó)", "(｀皿´#)", "٩(╬ʘ益ʘ╬)۶", "(¬‿¬)", "(⌐■_■)", "( ˘︹˘ )", "(๑•̀ㅂ•́)و✧"]
+
+
+def roll_outfit() -> tuple[str, str]:
+    """(한글 설명, 단보루 태그) 반환."""
+    c1, c2 = random.sample(W_COLORS, 2)
+    outfit = random.choice(W_OUTFITS)
+    leg = random.choice(W_LEGS)
+    head = random.choice(W_HEADS)
+    accs = random.sample(W_ACCS, 2)
+    extra = random.choice(W_EXTRAS)
+    kor = f"{c1[1]} {outfit[1]} + {c2[1]} {leg[1]} + {head[1]} + {accs[0][1]} + {accs[1][1]} + {extra[1]}"
+    tags = f"{c1[0]} {outfit[0]}, {c2[0]} {leg[0]}, {head[0]}, {accs[0][0]}, {accs[1][0]}, {extra[0]}"
+    return kor, tags
+
+
+def punish_block(victim: str) -> str:
+    kor, tags = roll_outfit()
+    return (f"{victim} {random.choice(BATTLE_LOSE)} {random.choice(PUNISH_KAO)}\n"
+            f"> {random.choice(PUNISH_HEAD).format(fit=kor)}\n"
+            f"> 태그: `{tags}`")
+
+
+def dice_line(name: str, n: int) -> str:
+    face = "(｀・ω・´)" if n >= 70 else ("( ˘︹˘ )" if n >= 40 else "(´；ω；`)")
+    bar = "█" * (n // 10) + "░" * (10 - n // 10)
+    return f"🎲 {name} `{bar}` **{n}** {face}"
+
+
+@client.tree.command(name="대결", description="주사위 대결! 진 녀석은 이몸이 사형집행한다!")
+@app_commands.describe(상대="싸울 상대")
+async def battle_cmd(inter: discord.Interaction, 상대: discord.Member):
+    a, b = inter.user, 상대
+    if a.id == b.id:
+        await inter.response.send_message(f"{a.mention} 자기 자신이랑 싸우겠다고?! …그것도 벌칙감이야!\n{punish_block(a.mention)}")
+        return
+    head = f"# ⚔️ {a.display_name} vs {b.display_name}\n{random.choice(BATTLE_INTRO)} {kao()}"
+    await inter.response.send_message(head)
+    await asyncio.sleep(1.5)
+    ra, rb = random.randint(1, 100), random.randint(1, 100)
+    body = f"{head}\n{dice_line(a.mention, ra)}\n{dice_line(b.mention, rb)}\n"
+    if ra == rb:
+        body += f"# 🤝 {ra} : {rb} 무승부!\n{random.choice(BATTLE_TIE)} {kao()}\n{punish_block(a.mention)}\n{punish_block(b.mention)}"
+    else:
+        win, lose = (a, b) if ra > rb else (b, a)
+        bot_lost = lose.id == client.user.id
+        body += f"# 🏆 {win.display_name} {random.choice(BATTLE_WIN)} {kao()}\n"
+        if bot_lost:
+            body += f"{lose.mention} …이몸이 졌다고?! 흥, 이몸은 이거 입어주지! 어때, 어울리지?!\n"
+            kor, tags = roll_outfit()
+            body += f"> **{kor}**\n> 태그: `{tags}`"
+        else:
+            body += punish_block(lose.mention)
+    await inter.edit_original_response(content=body)
 
 
 @client.event
