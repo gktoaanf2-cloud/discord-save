@@ -264,6 +264,7 @@ class Item:
     author: str
     created: dt.datetime
     message_id: int
+    uid: str
     size: int = 0
 
 
@@ -342,16 +343,24 @@ async def collect(job: Job, progress) -> Optional[int]:
         author = safe_name(msg.author.display_name)
         for a in msg.attachments:
             if is_wanted(a.filename, a.content_type):
-                job.items.append(Item(a.url, a.filename, author, msg.created_at, msg.id, a.size))
-        for e in msg.embeds:
+                job.items.append(Item(a.url, a.filename, author, msg.created_at, msg.id, str(a.id), a.size))
+        for ei, e in enumerate(msg.embeds):
             for part in (e.image, e.thumbnail):
                 url = getattr(part, "url", None)
                 if url and re.search(r"(cdn|media)\.discordapp\.(com|net)/", url):
                     name = Path(url.split("?", 1)[0]).name or "embed.png"
                     if is_wanted(name, None):
-                        job.items.append(Item(url, name, author, msg.created_at, msg.id))
+                        job.items.append(Item(url, name, author, msg.created_at, msg.id, f"{msg.id}e{ei}"))
         if scanned % 200 == 0:
             await progress(f"메시지 {scanned}개 뒤지는 중… 이미지 {len(job.items)}장 찾았어!")
+    seen_url: set[str] = set()
+    uniq = []
+    for it in job.items:
+        u = it.url.split("?", 1)[0]
+        if u not in seen_url:
+            seen_url.add(u)
+            uniq.append(it)
+    job.items = uniq
     await progress(f"메시지 {scanned}개 다 봤어! 이미지 {len(job.items)}장!")
     return last_id
 
@@ -391,10 +400,15 @@ async def download_all(job: Job, workdir: Path, progress) -> tuple[int, int, int
                     stamp = it.created.astimezone(KST).strftime("%Y%m%d_%H%M")
                     base = safe_name(Path(it.filename).stem, 60)
                     ext = Path(it.filename).suffix.lower() or ".png"
-                    name = f"{stamp}_{it.author}_{it.message_id}_{base}{ext}"
+                    name = f"{stamp}_{it.author}_{it.uid}_{base}{ext}"
                     folder = workdir / it.author if job.by_author else workdir
                     folder.mkdir(parents=True, exist_ok=True)
-                    (folder / name).write_bytes(data)
+                    dest = folder / name
+                    n = 1
+                    while dest.exists():
+                        n += 1
+                        dest = folder / f"{stamp}_{it.author}_{it.uid}_{base}_{n}{ext}"
+                    dest.write_bytes(data)
                     it.size = len(data)
                     ok += 1
             now = time.time()
@@ -491,6 +505,7 @@ async def run_job(inter: discord.Interaction, job: Job, announce: Optional[str] 
             work = tmp / "files"
             work.mkdir()
             ok, dup, fail = await download_all(job, work, progress)
+            ok = sum(1 for f in work.rglob("*") if f.is_file())
             if ok == 0:
                 await msg.edit(content=f"{head}{say('error')} (실패 {fail}, 중복 {dup}) 커서는 그대로 뒀어.")
                 return
