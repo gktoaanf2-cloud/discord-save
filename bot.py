@@ -222,9 +222,25 @@ def r2_presign(key: str, seconds: int) -> str:
     )
 
 
-def r2_upload(path: Path, key: str) -> str:
-    s3.upload_file(str(path), R2_BUCKET, key, ExtraArgs={"ContentType": "application/zip"})
+def r2_upload(path: Path, key: str, callback=None) -> str:
+    s3.upload_file(str(path), R2_BUCKET, key, ExtraArgs={"ContentType": "application/zip"}, Callback=callback)
     return r2_presign(key, LINK_TTL_HOURS * 3600)
+
+
+async def upload_with_progress(z: Path, key: str, progress, label: str) -> str:
+    """스레드에서 업로드하며 2초마다 진행률 갱신."""
+    total = z.stat().st_size
+    sent = {"n": 0}
+
+    def cb(nbytes: int):
+        sent["n"] += nbytes
+
+    task = asyncio.create_task(asyncio.to_thread(r2_upload, z, key, cb))
+    while not task.done():
+        pct = sent["n"] * 100 // total if total else 100
+        await progress(f"업로드 중… {label} {pct}% ({human(sent['n'])}/{human(total)})")
+        await asyncio.sleep(2)
+    return await task
 
 
 def r2_delete(key: str) -> None:
@@ -518,9 +534,8 @@ async def run_job(inter: discord.Interaction, job: Job, announce: Optional[str] 
             links = []
             total_bytes = 0
             for i, z in enumerate(zips, 1):
-                await progress(f"업로드 중… ({i}/{len(zips)})")
                 key = f"{job.channel.guild.id}/{job.channel.id}/{job.user.id}/{z.name}"
-                url = await asyncio.to_thread(r2_upload, z, key)
+                url = await upload_with_progress(z, key, progress, f"({i}/{len(zips)})")
                 sz = z.stat().st_size
                 total_bytes += sz
                 db.execute(
