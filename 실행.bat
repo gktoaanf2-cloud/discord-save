@@ -1,5 +1,6 @@
 @echo off
 cd /d "%~dp0"
+set PYTHONUTF8=1
 if not exist .env (
   echo [!] .env not found. Copy .env.example to .env and fill in the values.
   pause

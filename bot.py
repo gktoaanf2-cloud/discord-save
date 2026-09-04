@@ -1,7 +1,7 @@
 """
-Saver — 디스코드 채널 이미지 일괄 백업 봇
-/save 로 "마지막 저장 지점 이후" 이미지를 ZIP으로 묶어 R2 링크로 전달.
-커서는 채널 × 호출자 기준. 채널 주인 매핑(/owner)으로 인자 없이 자기 방 자동 지정.
+Saver — 디스코드 채널 이미지 일괄 백업 봇 (츤데레 에디션)
+/저장 으로 "마지막 저장 지점 이후" 이미지를 ZIP으로 묶어 R2 링크로 전달.
+커서는 채널 × 호출자 기준. 채널 주인 매핑(/주인)으로 인자 없이 자기 방 자동 지정.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import datetime as dt
 import hashlib
 import logging
 import os
+import random
 import re
 import shutil
 import sqlite3
@@ -29,9 +30,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
 # ───────────────────────── 설정 ─────────────────────────
-TOKEN = os.environ["DISCORD_TOKEN"]
-GUILD_ID = int(os.environ.get("GUILD_ID", "0") or 0)
 def _account_id(raw: str) -> str:
     """계정 ID만, 또는 S3 API 주소 전체가 들어와도 32자리 ID만 추출."""
     m = re.search(r"([0-9a-f]{32})", raw)
@@ -40,23 +40,101 @@ def _account_id(raw: str) -> str:
     return m.group(1)
 
 
+TOKEN = os.environ["DISCORD_TOKEN"]
+GUILD_ID = int(os.environ.get("GUILD_ID", "0") or 0)
 R2_ACCOUNT_ID = _account_id(os.environ["R2_ACCOUNT_ID"])
 R2_ACCESS_KEY = os.environ["R2_ACCESS_KEY_ID"]
 R2_SECRET_KEY = os.environ["R2_SECRET_ACCESS_KEY"]
 R2_BUCKET = os.environ["R2_BUCKET"]
-LINK_TTL_HOURS = int(os.environ.get("LINK_TTL_HOURS", "72"))
+LINK_TTL_HOURS = int(os.environ.get("LINK_TTL_HOURS", "1"))
 MAX_ZIP_MB = int(os.environ.get("MAX_ZIP_MB", "1500"))
 INCLUDE_VIDEO = os.environ.get("INCLUDE_VIDEO", "0") == "1"
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data")).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "saver.sqlite3"
 DOWNLOAD_CONCURRENCY = 6
+KST = dt.timezone(dt.timedelta(hours=9))
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".avif", ".heic"}
 VIDEO_EXT = {".mp4", ".mov", ".webm", ".mkv"}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("saver")
+
+
+# ───────────────────────── 대사 ─────────────────────────
+KAOMOJI = [
+    "(๑•̀ㅂ•́)و✧", "(｀・ω・´)", "(￣^￣)ゞ", "ヽ(`Д´)ﾉ", "(╬ Ò﹏Ó)", "(¬_¬)", "( •̀ ω •́ )✧",
+    "٩(◕‿◕｡)۶", "(☞ﾟヮﾟ)☞", "ヾ(≧▽≦*)o", "(ノ°益°)ノ", "(ง'̀-'́)ง", "(๑˃̵ᴗ˂̵)", "(´｡• ᵕ •｡`)",
+    "┐(´д`)┌", "(｡•̀ᴗ-)✧", "ヽ(°〇°)ﾉ", "(¬‿¬)", "(≧◡≦)", "(⌐■_■)", "(*≧ω≦)", "( ｡•̀_•́｡)",
+    "(・`ω´・)", "( ˘︹˘ )", "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧", "(๑•̀ㅁ•́๑)✧", "(ᗒᗣᗕ)՞", "ヾ(๑╹◡╹)ﾉ", "(｡•̀ᴗ-)", "(ᵔᴥᵔ)",
+]
+
+LINES = {
+    "start": [
+        "어이어이! 지금 저장 중이야~! 기다려봐!",
+        "이몸이 직접 나섰다! 잠자코 기다려!",
+        "귀찮게 하긴… 알았어, 저장해 준다고!",
+        "흥, 이 정도쯤이야! 잠깐 기다려!",
+        "저장 시작! 딴짓하지 말고 기다려!",
+        "또 너냐! …알았어, 지금 긁어온다!",
+    ],
+    "done": [
+        "어이! 이녀석아! 저장 다 됐어!",
+        "흥, 이 정도야 이몸에겐 식은 죽 먹기지!",
+        "다 됐어! 고마워하라고!",
+        "끝! 이몸의 실력을 똑똑히 봤겠지!",
+        "자, 받아! 잃어버리면 안 알려준다!",
+        "저장 완료! 칭찬은 안 받아도 돼… 딱히!",
+    ],
+    "expire": [
+        "{h}시간 뒤에 링크 만료야 코롸ㅡ!",
+        "{h}시간 지나면 링크 사라진다! 빨리 받아!",
+        "링크는 {h}시간짜리야! 늦으면 몰라!",
+    ],
+    "cursor": [
+        "어이! 마지막 저장시점은 {d}이야! 알겠냐! 이몸을 귀찮게 하다니~!",
+        "마지막으로 저장한 건 {d}! 거기서부터 이어간다! 기억 좀 해!",
+        "{d}까지 저장했었잖아! 그 뒤부터야! 알겠냐!",
+    ],
+    "nocursor": [
+        "저장한 적이 없잖아! 처음부터 싹 다 긁어주지!",
+        "기록이 없네… 이번엔 처음부터야! 감사해라!",
+    ],
+    "empty": [
+        "새 이미지가 없잖아! 이몸을 헛걸음시키다니~!",
+        "받을 게 하나도 없어! 뭘 기대한 거야!",
+        "텅 비었어! 다음엔 뭐라도 올리고 불러!",
+    ],
+    "queue": [
+        "앞에 순서가 있어! 줄 서! {n}번째야!",
+        "이몸은 하나뿐이라고! {n}번째로 기다려!",
+    ],
+    "error": [
+        "으악! 뭔가 잘못됐어! 이몸 탓 아니야!",
+        "에러다! …딱히 당황한 건 아니야!",
+    ],
+    "reset": [
+        "커서 지웠어! 다음엔 처음부터 다시야!",
+        "초기화 완료! 기억 싹 지웠다!",
+    ],
+    "links": [
+        "아직 안 죽은 링크 다시 준다! 이번엔 꼭 받아!",
+        "흥, 또 잃어버린 거냐! 자, 받아!",
+    ],
+    "nolinks": [
+        "살아있는 링크가 없어! 다시 /저장 해!",
+    ],
+}
+
+
+def say(kind: str, **kw) -> str:
+    return f"{random.choice(LINES[kind]).format(**kw)} {random.choice(KAOMOJI)}"
+
+
+def kao() -> str:
+    return random.choice(KAOMOJI)
+
 
 # ───────────────────────── DB ─────────────────────────
 db = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -108,6 +186,10 @@ def cursor_del(channel_id: int, user_id: int) -> int:
     return n
 
 
+def cursor_date(message_id: int) -> str:
+    return discord.utils.snowflake_time(message_id).astimezone(KST).strftime("%Y년 %m월 %d일 %H:%M")
+
+
 def owner_get(user_id: int) -> Optional[int]:
     row = db.execute("SELECT channel_id FROM owners WHERE user_id=?", (user_id,)).fetchone()
     return row[0] if row else None
@@ -132,13 +214,17 @@ s3 = boto3.client(
 )
 
 
-def r2_upload(path: Path, key: str) -> str:
-    s3.upload_file(str(path), R2_BUCKET, key, ExtraArgs={"ContentType": "application/zip"})
+def r2_presign(key: str, seconds: int) -> str:
     return s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": R2_BUCKET, "Key": key, "ResponseContentDisposition": f'attachment; filename="{Path(key).name}"'},
-        ExpiresIn=LINK_TTL_HOURS * 3600,
+        ExpiresIn=max(60, seconds),
     )
+
+
+def r2_upload(path: Path, key: str) -> str:
+    s3.upload_file(str(path), R2_BUCKET, key, ExtraArgs={"ContentType": "application/zip"})
+    return r2_presign(key, LINK_TTL_HOURS * 3600)
 
 
 def r2_delete(key: str) -> None:
@@ -154,7 +240,7 @@ def safe_name(s: str, limit: int = 40) -> str:
     return (s or "_")[:limit]
 
 
-def human(n: int) -> str:
+def human(n: float) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024:
             return f"{n:.0f}{unit}" if unit == "B" else f"{n:.1f}{unit}"
@@ -236,7 +322,7 @@ class Saver(discord.Client):
                     log.info("만료 ZIP %d개 정리", len(rows))
             except Exception:  # noqa: BLE001
                 log.exception("정리 루프 오류")
-            await asyncio.sleep(3600)
+            await asyncio.sleep(600)
 
 
 client = Saver()
@@ -265,8 +351,8 @@ async def collect(job: Job, progress) -> Optional[int]:
                     if is_wanted(name, None):
                         job.items.append(Item(url, name, author, msg.created_at, msg.id))
         if scanned % 200 == 0:
-            await progress(f"메시지 {scanned}개 확인 중… 이미지 {len(job.items)}장 발견")
-    await progress(f"메시지 {scanned}개 확인 완료 → 이미지 {len(job.items)}장")
+            await progress(f"메시지 {scanned}개 뒤지는 중… 이미지 {len(job.items)}장 찾았어!")
+    await progress(f"메시지 {scanned}개 다 봤어! 이미지 {len(job.items)}장!")
     return last_id
 
 
@@ -302,7 +388,7 @@ async def download_all(job: Job, workdir: Path, progress) -> tuple[int, int, int
                     dup += 1
                 else:
                     seen_hash.add(h)
-                    stamp = it.created.astimezone(dt.timezone(dt.timedelta(hours=9))).strftime("%Y%m%d_%H%M")
+                    stamp = it.created.astimezone(KST).strftime("%Y%m%d_%H%M")
                     base = safe_name(Path(it.filename).stem, 60)
                     ext = Path(it.filename).suffix.lower() or ".png"
                     name = f"{stamp}_{it.author}_{it.message_id}_{base}{ext}"
@@ -314,7 +400,7 @@ async def download_all(job: Job, workdir: Path, progress) -> tuple[int, int, int
             now = time.time()
             if now - last_tick > 2 or done == total:
                 last_tick = now
-                await progress(f"다운로드 {done}/{total}")
+                await progress(f"다운로드 {done}/{total}… 재촉하지 마!")
 
     await asyncio.gather(*(one(it) for it in job.items))
     return ok, dup, fail
@@ -346,7 +432,7 @@ def make_zips(workdir: Path, outdir: Path, stem: str) -> list[Path]:
         cur.write(f, f.relative_to(workdir).as_posix())
         cur_size += sz
     cur.close()
-    if len(zips) > 1:  # 첫 파일도 part1 이름으로 통일
+    if len(zips) > 1:
         first = zips[0]
         renamed = outdir / f"{stem}_part1.zip"
         first.rename(renamed)
@@ -354,8 +440,28 @@ def make_zips(workdir: Path, outdir: Path, stem: str) -> list[Path]:
     return zips
 
 
-async def run_job(inter: discord.Interaction, job: Job):
-    msg = await inter.followup.send("⏳ 준비 중…", ephemeral=True, wait=True)
+def result_embed(job: Job, ok: int, total_bytes: int, links: list, dup: int, fail: int) -> discord.Embed:
+    first = min(it.created for it in job.items).astimezone(KST)
+    last = max(it.created for it in job.items).astimezone(KST)
+    expire = (dt.datetime.now(KST) + dt.timedelta(hours=LINK_TTL_HOURS)).strftime("%m/%d %H:%M")
+    emb = discord.Embed(
+        title=f"📦 #{job.channel.name} 저장 완료 {kao()}",
+        description=f"**{ok}장** · {human(total_bytes)} · {job.label}\n{first:%Y-%m-%d} ~ {last:%Y-%m-%d}",
+        colour=0xF6A6C1,
+    )
+    for name, url, sz in links:
+        emb.add_field(name=name, value=f"[⬇ 다운로드]({url}) · {human(sz)}", inline=False)
+    foot = f"링크 만료 {expire} (KST)"
+    if dup or fail:
+        foot += f" · 중복 {dup} · 실패 {fail}"
+    emb.set_footer(text=foot)
+    return emb
+
+
+async def run_job(inter: discord.Interaction, job: Job, announce: Optional[str] = None):
+    """공개 채팅으로 진행 상황 갱신하며 작업 실행."""
+    head = f"{inter.user.mention} {announce}\n" if announce else f"{inter.user.mention} "
+    msg = await inter.followup.send(head + say("start"), wait=True)
     state = {"text": ""}
 
     async def progress(text: str):
@@ -363,34 +469,34 @@ async def run_job(inter: discord.Interaction, job: Job):
             return
         state["text"] = text
         try:
-            await msg.edit(content=f"⏳ **#{job.channel.name}** · {text}")
+            await msg.edit(content=f"{head}⏳ **#{job.channel.name}** · {text} {kao()}")
         except discord.HTTPException:
             pass
 
     if client.job_lock.locked():
         client.waiting += 1
-        await progress(f"대기열 {client.waiting}번째 — 앞 작업 끝나면 시작")
+        await progress(say("queue", n=client.waiting))
     async with client.job_lock:
         client.waiting = max(0, client.waiting - 1)
         tmp = Path(tempfile.mkdtemp(prefix="saver_"))
         try:
-            await progress("메시지 확인 중…")
+            await progress("메시지 뒤지는 중…")
             last_id = await collect(job, progress)
             if not job.items:
                 if last_id:
                     cursor_set(job.channel.id, job.user.id, last_id)
-                await progress("새 이미지가 없습니다. 커서를 최신으로 맞췄어요.")
+                await msg.edit(content=f"{head}{say('empty')}")
                 return
 
             work = tmp / "files"
             work.mkdir()
             ok, dup, fail = await download_all(job, work, progress)
             if ok == 0:
-                await progress(f"다운로드 실패 (실패 {fail}, 중복 {dup}). 커서는 유지합니다.")
+                await msg.edit(content=f"{head}{say('error')} (실패 {fail}, 중복 {dup}) 커서는 그대로 뒀어.")
                 return
 
-            await progress("ZIP 압축 중…")
-            stamp = dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y%m%d_%H%M%S")
+            await progress("ZIP으로 묶는 중…")
+            stamp = dt.datetime.now(KST).strftime("%Y%m%d_%H%M%S")
             stem = f"{safe_name(job.channel.name)}_{stamp}"
             zips = await asyncio.to_thread(make_zips, work, tmp, stem)
 
@@ -408,32 +514,15 @@ async def run_job(inter: discord.Interaction, job: Job):
                 )
                 links.append((z.name, url, sz))
             db.commit()
-
             cursor_set(job.channel.id, job.user.id, last_id)
 
-            first = min(it.created for it in job.items)
-            last = max(it.created for it in job.items)
-            kst = dt.timezone(dt.timedelta(hours=9))
-            span = f"{first.astimezone(kst):%Y-%m-%d} ~ {last.astimezone(kst):%Y-%m-%d}"
-            expire = (dt.datetime.now(kst) + dt.timedelta(hours=LINK_TTL_HOURS)).strftime("%m/%d %H:%M")
-
-            emb = discord.Embed(
-                title=f"✅ #{job.channel.name} 저장 완료",
-                description=f"**{ok}장** · {human(total_bytes)} · {job.label}\n기간 {span}",
-                colour=0x8AA0D8,
-            )
-            for name, url, sz in links:
-                emb.add_field(name=name, value=f"[다운로드]({url}) · {human(sz)}", inline=False)
-            foot = f"링크 만료 {expire} (KST)"
-            if dup or fail:
-                foot += f" · 중복 {dup} · 실패 {fail}"
-            emb.set_footer(text=foot)
-            await msg.edit(content=None, embed=emb)
+            done_text = f"{inter.user.mention} {say('done')}\n{say('expire', h=LINK_TTL_HOURS)}"
+            await msg.edit(content=done_text, embed=result_embed(job, ok, total_bytes, links, dup, fail))
         except discord.Forbidden:
-            await progress("❌ 이 채널을 읽을 권한이 없습니다. 봇 역할에 '채널 보기'와 '메시지 기록 보기'가 필요합니다.")
+            await msg.edit(content=f"{head}이 채널은 이몸이 못 봐! 권한 좀 줘! {kao()}")
         except Exception as e:  # noqa: BLE001
             log.exception("작업 실패")
-            await progress(f"❌ 오류: {type(e).__name__}: {e}")
+            await msg.edit(content=f"{head}{say('error')}\n`{type(e).__name__}: {e}`")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -453,91 +542,124 @@ def resolve_channel(inter: discord.Interaction, channel: Optional[discord.TextCh
 def parse_date(s: str) -> Optional[dt.datetime]:
     for fmt in ("%Y-%m-%d", "%Y%m%d", "%Y.%m.%d", "%Y/%m/%d"):
         try:
-            return dt.datetime.strptime(s, fmt).replace(tzinfo=dt.timezone(dt.timedelta(hours=9)))
+            return dt.datetime.strptime(s, fmt).replace(tzinfo=KST)
         except ValueError:
             continue
     return None
 
 
-@client.tree.command(name="save", description="마지막 저장 지점 이후의 이미지를 ZIP으로 묶어 링크로 드립니다")
+def cursor_line(ch: discord.TextChannel, user_id: int) -> tuple[Optional[int], str]:
+    cur = cursor_get(ch.id, user_id)
+    if cur:
+        return cur, say("cursor", d=cursor_date(cur))
+    return None, say("nocursor")
+
+
+@client.tree.command(name="저장", description="마지막 저장 지점 이후 이미지를 ZIP으로 묶어 링크로 줍니다")
 @app_commands.describe(
-    channel="대상 채널 (비우면 내 방 → 없으면 현재 채널)",
-    from_date="이 날짜부터 (YYYY-MM-DD). 커서 무시",
-    all="채널 전체 처음부터 (커서 무시)",
-    mine="내가 올린 것만",
-    by_author="작성자별 폴더로 나누기",
+    채널="대상 채널 (비우면 내 방 → 없으면 현재 채널)",
+    부터="이 날짜부터 (예: 2026-08-01). 저장 지점 무시",
+    전체="채널 전체 처음부터 (저장 지점 무시)",
+    내것만="내가 올린 것만",
+    작성자별="작성자별 폴더로 나누기",
 )
-@app_commands.rename(from_date="from")
 async def save_cmd(
     inter: discord.Interaction,
-    channel: Optional[discord.TextChannel] = None,
-    from_date: Optional[str] = None,
-    all: bool = False,
-    mine: bool = False,
-    by_author: bool = False,
+    채널: Optional[discord.TextChannel] = None,
+    부터: Optional[str] = None,
+    전체: bool = False,
+    내것만: bool = False,
+    작성자별: bool = False,
 ):
-    await inter.response.defer(ephemeral=True, thinking=True)
-    ch = resolve_channel(inter, channel)
-    if all:
+    await inter.response.defer(thinking=True)
+    ch = resolve_channel(inter, 채널)
+    announce = None
+    if 전체:
         after_id, label = None, "전체"
-    elif from_date:
-        d = parse_date(from_date)
+    elif 부터:
+        d = parse_date(부터)
         if not d:
-            await inter.followup.send("날짜 형식은 YYYY-MM-DD 입니다.", ephemeral=True)
+            await inter.followup.send(f"{inter.user.mention} 날짜는 2026-08-01 처럼 써! {kao()}")
             return
         after_id, label = discord.utils.time_snowflake(d), f"{d:%Y-%m-%d}부터"
     else:
-        after_id = cursor_get(ch.id, inter.user.id)
+        after_id, announce = cursor_line(ch, inter.user.id)
         label = "이어서" if after_id else "처음부터"
-    if mine:
+    if 내것만:
         label += " · 내 것만"
-    job = Job(inter.user, ch, after_id, mine, by_author, label)
-    await run_job(inter, job)
+    await run_job(inter, Job(inter.user, ch, after_id, 내것만, 작성자별, label), announce)
 
 
-@client.tree.command(name="save-status", description="이 채널에서 내 마지막 저장 지점을 확인합니다")
-@app_commands.describe(channel="대상 채널 (비우면 내 방 → 현재 채널)")
-async def status_cmd(inter: discord.Interaction, channel: Optional[discord.TextChannel] = None):
-    ch = resolve_channel(inter, channel)
-    cur = cursor_get(ch.id, inter.user.id)
-    if not cur:
-        await inter.response.send_message(f"#{ch.name}: 아직 저장한 적 없음 → 다음 /save 는 처음부터", ephemeral=True)
-        return
-    t = discord.utils.snowflake_time(cur).astimezone(dt.timezone(dt.timedelta(hours=9)))
-    await inter.response.send_message(f"#{ch.name}: 마지막 저장 지점 **{t:%Y-%m-%d %H:%M}** (KST) 이후부터 이어서 받습니다", ephemeral=True)
+@client.tree.command(name="이어저장", description="마지막 저장 지점부터 이어서 저장합니다")
+@app_commands.describe(채널="대상 채널 (비우면 내 방 → 현재 채널)", 작성자별="작성자별 폴더로 나누기")
+async def continue_cmd(inter: discord.Interaction, 채널: Optional[discord.TextChannel] = None, 작성자별: bool = False):
+    await inter.response.defer(thinking=True)
+    ch = resolve_channel(inter, 채널)
+    after_id, announce = cursor_line(ch, inter.user.id)
+    await run_job(inter, Job(inter.user, ch, after_id, False, 작성자별, "이어서" if after_id else "처음부터"), announce)
 
 
-@client.tree.command(name="save-reset", description="저장 지점(커서)을 초기화합니다. 다음 /save 는 처음부터")
-@app_commands.describe(channel="대상 채널", user="다른 멤버 커서 초기화 (관리자만)")
-async def reset_cmd(inter: discord.Interaction, channel: Optional[discord.TextChannel] = None, user: Optional[discord.Member] = None):
-    ch = resolve_channel(inter, channel)
+@client.tree.command(name="저장시점", description="이 채널에서 내 마지막 저장 지점을 알려줍니다")
+@app_commands.describe(채널="대상 채널 (비우면 내 방 → 현재 채널)")
+async def status_cmd(inter: discord.Interaction, 채널: Optional[discord.TextChannel] = None):
+    ch = resolve_channel(inter, 채널)
+    _, line = cursor_line(ch, inter.user.id)
+    await inter.response.send_message(f"{inter.user.mention} **#{ch.name}** — {line}")
+
+
+@client.tree.command(name="저장초기화", description="저장 지점을 지웁니다. 다음 /저장 은 처음부터")
+@app_commands.describe(채널="대상 채널", 멤버="다른 멤버 것 초기화 (관리자만)")
+async def reset_cmd(inter: discord.Interaction, 채널: Optional[discord.TextChannel] = None, 멤버: Optional[discord.Member] = None):
+    ch = resolve_channel(inter, 채널)
     target = inter.user
-    if user and user.id != inter.user.id:
+    if 멤버 and 멤버.id != inter.user.id:
         if not inter.user.guild_permissions.administrator:
-            await inter.response.send_message("다른 멤버의 커서는 관리자만 초기화할 수 있어요.", ephemeral=True)
+            await inter.response.send_message(f"남의 기록은 관리자만 지울 수 있어! {kao()}", ephemeral=True)
             return
-        target = user
+        target = 멤버
     n = cursor_del(ch.id, target.id)
-    who = "내" if target.id == inter.user.id else f"{target.display_name} 님"
+    who = "" if target.id == inter.user.id else f"{target.display_name} 님 "
     await inter.response.send_message(
-        f"#{ch.name}: {who} 커서 {'초기화 완료' if n else '기록 없음'}", ephemeral=True
+        f"{inter.user.mention} **#{ch.name}** {who}{say('reset') if n else '기록이 원래 없었어! ' + kao()}"
     )
 
 
-owner_group = app_commands.Group(name="owner", description="채널 주인 매핑 (관리자)", default_permissions=discord.Permissions(administrator=True))
+@client.tree.command(name="링크", description="아직 만료 안 된 다운로드 링크를 다시 받습니다")
+@app_commands.describe(채널="대상 채널 (비우면 내 방 → 현재 채널)")
+async def links_cmd(inter: discord.Interaction, 채널: Optional[discord.TextChannel] = None):
+    await inter.response.defer(thinking=True)
+    ch = resolve_channel(inter, 채널)
+    now = time.time()
+    rows = db.execute(
+        "SELECT key,size,expires_at FROM uploads WHERE user_id=? AND channel_id=? AND expires_at>? ORDER BY key",
+        (inter.user.id, ch.id, now),
+    ).fetchall()
+    if not rows:
+        await inter.followup.send(f"{inter.user.mention} {say('nolinks')}")
+        return
+    emb = discord.Embed(title=f"📦 #{ch.name} 링크 재발급 {kao()}", colour=0xF6A6C1)
+    for key, size, exp in rows:
+        url = await asyncio.to_thread(r2_presign, key, int(exp - now))
+        left = max(1, int((exp - now) / 60))
+        emb.add_field(name=Path(key).name, value=f"[⬇ 다운로드]({url}) · {human(size)} · {left}분 남음", inline=False)
+    await inter.followup.send(f"{inter.user.mention} {say('links')}", embed=emb)
 
 
-@owner_group.command(name="set", description="채널 주인을 지정합니다. 그 멤버가 /save 를 인자 없이 치면 자기 방이 자동 선택됩니다")
-async def owner_set_cmd(inter: discord.Interaction, channel: discord.TextChannel, user: discord.Member):
-    owner_set(channel.id, user.id)
-    await inter.response.send_message(f"#{channel.name} 주인 = {user.display_name}", ephemeral=True)
+owner_group = app_commands.Group(name="주인", description="채널 주인 매핑 (관리자)", default_permissions=discord.Permissions(administrator=True))
 
 
-@owner_group.command(name="list", description="채널 주인 목록")
+@owner_group.command(name="지정", description="채널 주인을 지정합니다. 그 멤버는 /저장 만 쳐도 자기 방이 선택됩니다")
+@app_commands.describe(채널="채널", 멤버="주인")
+async def owner_set_cmd(inter: discord.Interaction, 채널: discord.TextChannel, 멤버: discord.Member):
+    owner_set(채널.id, 멤버.id)
+    await inter.response.send_message(f"**#{채널.name}** 주인 = {멤버.display_name}! 기억해 뒀어! {kao()}", ephemeral=True)
+
+
+@owner_group.command(name="목록", description="채널 주인 목록")
 async def owner_list_cmd(inter: discord.Interaction):
     rows = db.execute("SELECT channel_id,user_id FROM owners").fetchall()
     if not rows:
-        await inter.response.send_message("등록된 주인 없음", ephemeral=True)
+        await inter.response.send_message(f"등록된 주인 없어! {kao()}", ephemeral=True)
         return
     lines = []
     for cid, uid in rows:
@@ -547,39 +669,40 @@ async def owner_list_cmd(inter: discord.Interaction):
     await inter.response.send_message("\n".join(lines), ephemeral=True)
 
 
-@owner_group.command(name="remove", description="채널 주인 매핑 해제")
-async def owner_remove_cmd(inter: discord.Interaction, channel: discord.TextChannel):
-    n = db.execute("DELETE FROM owners WHERE channel_id=?", (channel.id,)).rowcount
+@owner_group.command(name="해제", description="채널 주인 매핑 해제")
+@app_commands.describe(채널="채널")
+async def owner_remove_cmd(inter: discord.Interaction, 채널: discord.TextChannel):
+    n = db.execute("DELETE FROM owners WHERE channel_id=?", (채널.id,)).rowcount
     db.commit()
-    await inter.response.send_message(f"#{channel.name}: {'해제 완료' if n else '기록 없음'}", ephemeral=True)
+    await inter.response.send_message(f"**#{채널.name}** {'주인 해제했어!' if n else '주인 없었는데?'} {kao()}", ephemeral=True)
 
 
 client.tree.add_command(owner_group)
 
 
-@client.tree.command(name="save-all", description="현재 카테고리 안 모든 채널을 각각 ZIP으로 저장 (관리자)")
+@client.tree.command(name="전체저장", description="현재 카테고리 안 모든 채널을 각각 ZIP으로 저장 (관리자)")
 @app_commands.default_permissions(administrator=True)
-@app_commands.describe(all="커서 무시하고 전체")
-async def save_all_cmd(inter: discord.Interaction, all: bool = False):
-    await inter.response.defer(ephemeral=True, thinking=True)
+@app_commands.describe(전체="저장 지점 무시하고 처음부터")
+async def save_all_cmd(inter: discord.Interaction, 전체: bool = False):
+    await inter.response.defer(thinking=True)
     cat = getattr(inter.channel, "category", None)
     chans = [c for c in (cat.text_channels if cat else inter.guild.text_channels)
              if c.permissions_for(inter.guild.me).read_message_history]
-    await inter.followup.send(f"{len(chans)}개 채널 순차 처리 시작", ephemeral=True)
+    await inter.followup.send(f"{inter.user.mention} 채널 {len(chans)}개 전부?! …알았어, 차례로 간다! {kao()}")
     for ch in chans:
-        after_id = None if all else cursor_get(ch.id, inter.user.id)
-        job = Job(inter.user, ch, after_id, False, True, "전체" if all else ("이어서" if after_id else "처음부터"))
+        after_id = None if 전체 else cursor_get(ch.id, inter.user.id)
+        job = Job(inter.user, ch, after_id, False, True, "전체" if 전체 else ("이어서" if after_id else "처음부터"))
         await run_job(inter, job)
 
 
 @client.tree.error
 async def on_app_error(inter: discord.Interaction, error: app_commands.AppCommandError):
     log.exception("명령 오류", exc_info=error)
-    text = f"❌ {type(error).__name__}: {error}"
+    text = f"{say('error')}\n`{type(error).__name__}: {error}`"
     if inter.response.is_done():
-        await inter.followup.send(text, ephemeral=True)
+        await inter.followup.send(text)
     else:
-        await inter.response.send_message(text, ephemeral=True)
+        await inter.response.send_message(text)
 
 
 @client.event
