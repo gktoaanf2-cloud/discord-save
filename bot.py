@@ -114,6 +114,10 @@ LINES = {
         "으악! 뭔가 잘못됐어! 이몸 탓 아니야!",
         "에러다! …딱히 당황한 건 아니야!",
     ],
+    "mark": [
+        "여기까지는 이미 받은 거지? 알았어, 지금부터 새 것만 챙긴다!",
+        "저장 지점을 지금으로 맞췄어! 옛날 건 이몸 몰라!",
+    ],
     "reset": [
         "커서 지웠어! 다음엔 처음부터 다시야!",
         "초기화 완료! 기억 싹 지웠다!",
@@ -652,6 +656,22 @@ async def reset_cmd(inter: discord.Interaction, 채널: Optional[discord.TextCha
     await inter.response.send_message(
         f"{inter.user.mention} **#{ch.name}** {who}{say('reset') if n else '기록이 원래 없었어! ' + kao()}"
     )
+
+
+@client.tree.command(name="여기까지", description="다운로드 없이 저장 지점만 지금(채널 최신 메시지)으로 맞춥니다")
+@app_commands.describe(채널="대상 채널 (비우면 내 방 → 현재 채널)")
+async def mark_cmd(inter: discord.Interaction, 채널: Optional[discord.TextChannel] = None):
+    await inter.response.defer(thinking=True)
+    ch = resolve_channel(inter, 채널)
+    last = ch.last_message_id
+    if not last:
+        async for m in ch.history(limit=1):
+            last = m.id
+    if not last:
+        await inter.followup.send(f"{inter.user.mention} 채널이 텅 비었는데? {kao()}")
+        return
+    cursor_set(ch.id, inter.user.id, last)
+    await inter.followup.send(f"{inter.user.mention} **#{ch.name}** {say('mark')} ({cursor_date(last)})")
 
 
 @client.tree.command(name="링크", description="아직 만료 안 된 다운로드 링크를 다시 받습니다")
