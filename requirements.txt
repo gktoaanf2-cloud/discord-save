@@ -1,0 +1,4 @@
+discord.py>=2.7,<3
+aiohttp>=3.10
+boto3>=1.35
+python-dotenv>=1.0

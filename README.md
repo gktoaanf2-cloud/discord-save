@@ -1,0 +1,60 @@
+# Saver — 디스코드 채널 이미지 백업 봇
+
+멤버가 `/save` 를 치면 **마지막 저장 지점 이후** 그 채널에 올라온 이미지를 전부 ZIP으로 묶어
+Cloudflare R2 다운로드 링크(72시간)로 돌려준다. 커서는 **채널 × 호출자** 기준.
+
+## 명령
+
+| 명령 | 설명 |
+|---|---|
+| `/save` | 내 방(주인 매핑) → 없으면 현재 채널. 커서 이후 이미지 ZIP |
+| `/save channel:#쭈방` | 다른 채널 지정 |
+| `/save from:2026-08-01` | 날짜부터 (커서 무시) |
+| `/save all:True` | 채널 전체 처음부터 |
+| `/save mine:True` | 내가 올린 것만 |
+| `/save by_author:True` | 작성자별 폴더로 분류 |
+| `/save-status` | 내 마지막 저장 지점 확인 |
+| `/save-reset` | 내 커서 초기화 (관리자는 `user:` 로 남의 것도) |
+| `/owner set channel user` | 채널 주인 지정 (관리자) |
+| `/owner list` / `/owner remove` | 주인 목록 / 해제 |
+| `/save-all` | 현재 카테고리 전 채널 순차 저장 (관리자) |
+
+동작: 히스토리 스캔 → 이미지 다운로드(6병렬, sha256 중복 제거) → ZIP(1.5GB 초과 시 분할) → R2 업로드 → 링크.
+파일명 `YYYYMMDD_HHMM_작성자_메시지ID_원본명.ext`. 완료 시 커서 = 스캔한 마지막 메시지.
+작업은 한 번에 하나씩(큐), 응답은 본인만 보이는 메시지.
+
+## 1. 로컬 테스트 (Windows)
+
+1. `.env.example` 복사 → `.env`, 값 채우기 (토큰·서버ID·R2 키)
+2. `실행.bat` 더블클릭 → 콘솔에 `로그인: Saver#1234` 뜨면 성공
+3. 디스코드에서 `/save` 입력 → 명령 자동완성이 뜨면 동기화 완료
+
+R2 API 토큰 만들 때: R2 → **R2 API 토큰 관리** → **API 토큰 생성** → 권한 "객체 읽기 및 쓰기", 버킷은 만든 것 하나만 지정.
+
+## 2. VPS 배포 (Ubuntu, Oracle 무료 티어 기준)
+
+```bash
+sudo apt update && sudo apt install -y python3-venv git
+mkdir -p ~/discord-save && cd ~/discord-save
+# bot.py requirements.txt .env discord-save.service 를 scp 등으로 올린 뒤:
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+sudo cp discord-save.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now discord-save
+sudo journalctl -u discord-save -f     # 로그 보기
+```
+
+코드 갱신 시: 파일 교체 후 `sudo systemctl restart discord-save`.
+`.service` 의 `User`/경로가 다르면 맞춰 수정.
+
+## 3. Railway 로 대체할 때
+
+새 프로젝트 → GitHub 리포 연결(또는 CLI 업로드) → Variables 에 `.env` 내용 입력 →
+Start Command `python bot.py`. `DATA_DIR` 은 Volume 마운트 경로로(커서 DB 유지).
+
+## 주의
+
+- 봇 권한: 채널 보기 / 메시지 보내기 / 파일 첨부 / 메시지 기록 보기 / 링크 임베드. Message Content Intent ON.
+- 제외할 채널은 채널 권한에서 봇 역할 "채널 보기" OFF.
+- 디스코드 CDN 링크는 서명 만료가 있어 URL 저장은 무의미 → 항상 파일 자체를 받아 ZIP.
+- 인터랙션 토큰은 15분. 수천 장짜리 초대형 백필은 `from:` 으로 기간을 나눠 호출.

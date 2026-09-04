@@ -1,0 +1,16 @@
+[Unit]
+Description=Discord Saver bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/discord-save
+EnvironmentFile=/home/ubuntu/discord-save/.env
+ExecStart=/home/ubuntu/discord-save/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
