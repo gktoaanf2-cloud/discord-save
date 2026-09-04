@@ -156,6 +156,10 @@ db.executescript(
         channel_id INTEGER PRIMARY KEY,
         user_id    INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS settings(
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS uploads(
         key        TEXT PRIMARY KEY,
         user_id    INTEGER NOT NULL,
@@ -166,6 +170,16 @@ db.executescript(
     """
 )
 db.commit()
+
+
+def setting_get(key: str, default: str) -> str:
+    row = db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row[0] if row else default
+
+
+def setting_set(key: str, value: str) -> None:
+    db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+    db.commit()
 
 
 def cursor_get(channel_id: int, user_id: int) -> Optional[int]:
@@ -682,9 +696,12 @@ HELP_FIELDS = [
      "저장시점 싹 지운다. 다음 /저장은 **처음부터** 다시야!"),
     ("⏰ 링크 만료",
      "링크는 **{h}시간**짜리! 그 안에 안 받으면 사라진다! 코롸ㅡ!"),
+    ("🔍 이모지 확대",
+     "서버 이모지만 **달랑** 보내봐. 이몸이 크게 띄워준다! (한 번에 3개까지, 움직이는 것도 OK)\n"
+     "`/이모지 이모지:😎` 로 직접 시켜도 돼. 기본 이모지는 못 키워, 서버 이모지만!"),
     ("👑 관리자 전용",
      "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
-     "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에"),
+     "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에 / `/이모지확대 켜기|끄기`"),
 ]
 
 
@@ -796,6 +813,69 @@ async def on_app_error(inter: discord.Interaction, error: app_commands.AppComman
         await inter.followup.send(text)
     else:
         await inter.response.send_message(text)
+
+
+# ───────────────────────── 이모지 확대 ─────────────────────────
+EMOJI_RE = re.compile(r"<(a?):(\w+):(\d+)>")
+EMOJI_MAX = 3
+EMOJI_LINES = [
+    "이거 말이지? 크게 보여준다!", "흥, 이 정도야 식은 죽 먹기!", "자, 잘 봐!", "확대 완료! 고마워하라고!",
+]
+
+
+def emoji_url(animated: bool, eid: str) -> str:
+    ext = "gif" if animated else "png"
+    return f"https://cdn.discordapp.com/emojis/{eid}.{ext}?size=512&quality=lossless"
+
+
+def emoji_embeds(tokens, author: discord.abc.User) -> list[discord.Embed]:
+    embs = []
+    for anim, name, eid in tokens[:EMOJI_MAX]:
+        e = discord.Embed(colour=0xF6A6C1)
+        e.set_image(url=emoji_url(bool(anim), eid))
+        e.set_author(name=f"{author.display_name} · :{name}:", icon_url=author.display_avatar.url)
+        embs.append(e)
+    return embs
+
+
+@client.event
+async def on_message(msg: discord.Message):
+    if msg.author.bot or not msg.guild:
+        return
+    if setting_get("emoji_enlarge", "1") != "1":
+        return
+    content = msg.content.strip()
+    tokens = EMOJI_RE.findall(content)
+    if not tokens or EMOJI_RE.sub("", content).strip():
+        return  # 이모지 외 다른 글자가 있으면 무시
+    try:
+        await msg.channel.send(embeds=emoji_embeds(tokens, msg.author))
+    except discord.HTTPException:
+        log.exception("이모지 확대 전송 실패")
+
+
+@client.tree.command(name="이모지", description="서버 이모지를 크게 보여줍니다")
+@app_commands.describe(이모지="서버 커스텀 이모지 (최대 3개)")
+async def emoji_cmd(inter: discord.Interaction, 이모지: str):
+    tokens = EMOJI_RE.findall(이모지)
+    if not tokens:
+        await inter.response.send_message(
+            f"{inter.user.mention} 그건 못 키워! **서버 이모지**만 돼! 기본 이모지는 원래 크기가 그거야! {kao()}"
+        )
+        return
+    await inter.response.send_message(
+        f"{inter.user.mention} {random.choice(EMOJI_LINES)} {kao()}", embeds=emoji_embeds(tokens, inter.user)
+    )
+
+
+@client.tree.command(name="이모지확대", description="이모지 자동 확대 기능 켜기/끄기 (관리자)")
+@app_commands.default_permissions(administrator=True)
+@app_commands.describe(상태="켜기 또는 끄기")
+@app_commands.choices(상태=[app_commands.Choice(name="켜기", value="1"), app_commands.Choice(name="끄기", value="0")])
+async def emoji_toggle_cmd(inter: discord.Interaction, 상태: app_commands.Choice[str]):
+    setting_set("emoji_enlarge", 상태.value)
+    text = "이모지 확대 켰어! 이모지만 보내면 이몸이 키워준다!" if 상태.value == "1" else "이모지 확대 껐어! 이제 안 키워준다!"
+    await inter.response.send_message(f"{inter.user.mention} {text} {kao()}")
 
 
 @client.event
