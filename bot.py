@@ -658,6 +658,49 @@ async def reset_cmd(inter: discord.Interaction, 채널: Optional[discord.TextCha
     )
 
 
+HELP_INTRO = [
+    "뭐야, 사용법도 몰라? …할 수 없지, 이몸이 딱 한 번만 알려준다! 잘 들어!",
+    "또 물어보네… 알았어, 알았다고! 이번엔 제대로 외워!",
+    "흥, 설명서까지 이몸이 읽어줘야 해? …자, 잘 봐!",
+]
+
+HELP_FIELDS = [
+    ("📦 /저장",
+     "네 방에 올라온 이미지, **마지막으로 저장한 데 이후부터** 싹 긁어서 ZIP 링크로 준다!\n"
+     "다른 방도 올린 사람이 누구든 그 방 거면 다 챙겨. 자기 방에서 그냥 치면 돼!\n"
+     "옵션 붙이고 싶으면 → `채널:#방이름` 다른 방 / `부터:2026-08-01` 그 날짜부터 / "
+     "`전체:True` 처음부터 전부 / `내것만:True` 네가 올린 것만 / `작성자별:True` 올린 사람별 폴더"),
+    ("⏩ /이어저장",
+     "/저장이랑 똑같은데, **마지막 저장시점이 언제였는지** 먼저 말해주고 이어간다. 기억 안 나는 녀석용!"),
+    ("📍 /저장시점",
+     "저장은 안 하고 **마지막 저장시점만** 알려줘. 확인만 하고 싶을 때!"),
+    ("🚩 /여기까지",
+     "다운로드 없이 **저장시점만 지금으로** 맞춘다. 이미 딴 데서 받아둔 거라 건너뛰고 싶을 때 써!"),
+    ("🔗 /링크",
+     "링크 놓쳤어? **아직 안 죽은 링크** 다시 준다. 근데 만료 지나면 이몸도 몰라!"),
+    ("🔄 /저장초기화",
+     "저장시점 싹 지운다. 다음 /저장은 **처음부터** 다시야!"),
+    ("⏰ 링크 만료",
+     "링크는 **{h}시간**짜리! 그 안에 안 받으면 사라진다! 코롸ㅡ!"),
+    ("👑 관리자 전용",
+     "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
+     "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에"),
+]
+
+
+@client.tree.command(name="설명", description="세이버 사용법을 알려줍니다")
+async def help_cmd(inter: discord.Interaction):
+    emb = discord.Embed(
+        title=f"세이버 사용법 {kao()}",
+        description=random.choice(HELP_INTRO),
+        colour=0xF6A6C1,
+    )
+    for name, value in HELP_FIELDS:
+        emb.add_field(name=name, value=value.format(h=LINK_TTL_HOURS), inline=False)
+    emb.set_footer(text="파일명은 날짜_시간_올린사람_ID_원본명 순서야! 잘 정리해 줬으니 고마워하라고!")
+    await inter.response.send_message(f"{inter.user.mention} {kao()}", embed=emb)
+
+
 @client.tree.command(name="여기까지", description="다운로드 없이 저장 지점만 지금(채널 최신 메시지)으로 맞춥니다")
 @app_commands.describe(채널="대상 채널 (비우면 내 방 → 현재 채널)")
 async def mark_cmd(inter: discord.Interaction, 채널: Optional[discord.TextChannel] = None):
