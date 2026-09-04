@@ -701,6 +701,8 @@ HELP_FIELDS = [
      "`/이모지 이모지:😎` 로 직접 시켜도 돼. 기본 이모지는 못 키워, 서버 이모지만!"),
     ("👊 /구타",
      "이몸이 구타한다! `대상:@누구` 붙이면 그 녀석을! 안 붙이면… 네가 맞는 거야!"),
+    ("🏆 /개짱",
+     "이몸이 극찬한다! `대상:@누구` 붙이면 그 녀석을! 안 붙이면… 네가 개짱인 거야! 흥!"),
     ("👑 관리자 전용",
      "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
      "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에 / `/이모지확대 켜기|끄기`"),
@@ -924,6 +926,59 @@ async def beat_cmd(inter: discord.Interaction, 대상: Optional[discord.Member] 
         )
         return
     await inter.response.send_message(beat_text(inter.user.mention, victim))
+
+
+# ───────────────────────── 개짱 ─────────────────────────
+PRAISE_SHOUTS = [
+    "우오오오오오옷ㅡ!", "최고잖냐아아아!", "개짱이다아아아!", "미쳤다아아아!", "이게 뭐야아아아!",
+    "말도 안 돼애애애!", "우와아아아악!", "끼야아아아아!", "대박이잖냐아아!", "천재냐아아아!",
+    "레전드다아아아!", "역대급이다아아!", "심장 멎는다아아!", "존경한다아아아!",
+]
+PRAISE_LINES = [
+    "루브르에서 도적질해왔냐! 이건 예술이잖아!",
+    "이몸이 인정한다! 이건 진짜야! …딱히 감동한 건 아니야!",
+    "너 뭐야! 이런 걸 만들면 이몸이 뭐가 되냐고! 최고잖아!",
+    "이거 신이 만든 거지? 아니라고? 그럼 네가 신이네!",
+    "박물관에 갖다 놔! 당장! 이몸이 경비 서줄게!",
+    "무한 칭찬 모드 돌입! 개짱! 개짱! 개짱! 개짱!",
+    "칭찬 안 하려고 했는데… 못 참겠어! 개쩔어!",
+    "이몸 눈이 호강한다! 책임져! 이제 딴 건 못 봐!",
+    "완전 마음에 들어! 너무 마음에 들어! 억울할 정도로!",
+    "이 정도면 세계가 알아야 해! 이몸이 소문낼 거야!",
+    "지구 최고! 우주 최고! 이몸 인생 최고! 이의 없음!",
+    "츤데레고 뭐고 다 집어치워! 이건 그냥 최고야! 최고!",
+    "너… 나중에 유명해지면 이몸 모른 척하지 마! 알겠냐!",
+    "다시 봐도 개짱! 백 번 봐도 개짱! 안 질려!",
+    "이건 반칙이야! 이렇게 잘하면 반칙이라고! 상 줘!",
+    "…부러워. 아니, 안 부러워! 개짱이야! 그거면 됐어!",
+]
+PRAISE_KAO = [
+    "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧", "٩(ˊᗜˋ*)و", "ヾ(≧▽≦*)o", "(≧◡≦) ♡", "(*≧ω≦*)", "\\(^o^)/", "☆*:.｡.o(≧▽≦)o.｡.:*☆",
+    "(๑>◡<๑)", "(ღ˘⌣˘ღ)", "(〃＞＿＜;〃)", "٩(♡ε♡)۶", "(≧∀≦)ゞ", "ヽ(*⌒▽⌒*)ﾉ", "(✧ω✧)", "(⁄ ⁄•⁄ω⁄•⁄ ⁄)",
+    "♪(´ε｀ )", "(๑˃̵ᴗ˂̵)و", "(ﾉ´ヮ`)ﾉ*: ･ﾟ", "(☆▽☆)", "(♡°▽°♡)",
+]
+PRAISE_DECOR = ["✨", "🏆", "👑", "💎", "🌟", "💯", "🔥", "🎉", "💗", "⭐"]
+
+
+def praise_text(target: str) -> str:
+    shouts = random.sample(PRAISE_SHOUTS, k=random.randint(2, 3))
+    big = "\n".join(f"# {random.choice(PRAISE_DECOR)} {sh} {random.choice(PRAISE_KAO)}" for sh in shouts)
+    lines = random.sample(PRAISE_LINES, k=2)
+    deco = "".join(random.sample(PRAISE_DECOR, k=3))
+    return f"{big}\n{deco} **{target}** = 개짱 {deco}\n{lines[0]} {random.choice(PRAISE_KAO)}\n{lines[1]} {random.choice(PRAISE_KAO)}"
+
+
+@client.tree.command(name="개짱", description="이몸이 극찬한다!")
+@app_commands.describe(대상="개짱인 녀석 (비우면 네가 개짱)")
+async def praise_cmd(inter: discord.Interaction, 대상: Optional[discord.Member] = None):
+    if 대상 and 대상.id == client.user.id:
+        await inter.response.send_message(
+            f"{inter.user.mention} 뭐?! 이몸이 개짱이라고?! …당연하지! 알면서 왜 물어! {random.choice(PRAISE_KAO)}\n"
+            f"{praise_text(inter.user.mention)}"
+        )
+        return
+    target = 대상.mention if 대상 else inter.user.mention
+    await inter.response.send_message(praise_text(target))
 
 
 @client.event
