@@ -1165,7 +1165,7 @@ YACHA_KAO = [
 ]
 
 
-Y_PAIR = [("1boy, 1girl", "남녀"), ("2girls", "백합"), ("2boys", "BL"), ("1boy, 1girl", "남녀"), ("2girls, yuri", "백합")]
+Y_PAIR = [("2people, couple", "커플")]
 Y_POSE2 = [  # 2인 자세
     ("face-to-face", "마주보고"), ("hug", "포옹"), ("hug_from_behind", "백허그"), ("holding_hands", "손잡고"),
     ("interlocked_fingers", "깍지"), ("leg_between_thighs", "허벅지 사이 다리"), ("sitting_on_lap", "무릎 위에 앉아"),
