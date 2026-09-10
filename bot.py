@@ -706,6 +706,9 @@ HELP_FIELDS = [
     ("⚔️ /대결",
      "`상대:@누구` 랑 주사위(1d100) 대결! 진 녀석은 이몸이 **사형집행** — 랜덤 코디를 입는 처벌이다! "
      "단보루 태그로 뽑아주니까 그대로 그려! 무승부면 둘 다 벌칙!"),
+    ("😈 /야차",
+     "**연령제한 채널(야차방)에서만!** 음흉한 이몸이 NSFW 태그를 랜덤 조합해 준다. "
+     "`수위:순한맛` 은 의상·포즈·표정·장소만, `매운맛`(기본) 은 행위까지. 그대로 그려!"),
     ("👑 관리자 전용",
      "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
      "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에 / `/이모지확대 켜기|끄기`"),
@@ -1094,6 +1097,106 @@ async def battle_cmd(inter: discord.Interaction, 상대: discord.Member):
         else:
             body += punish_block(lose.mention)
     await inter.edit_original_response(content=body)
+
+
+# ───────────────────────── 야차 (NSFW 채널 전용) ─────────────────────────
+# (단보루 태그, 한글). 성인 캐릭터 전제. 미성년·비동의·수간·고어 계열 태그는 풀에 넣지 않는다.
+Y_WEAR = [
+    ("lingerie", "란제리"), ("see-through", "시스루"), ("naked_shirt", "셔츠만"), ("naked_apron", "알몸 앞치마"),
+    ("naked_towel", "수건 한 장"), ("micro_bikini", "마이크로 비키니"), ("bunny_suit", "바니 슈트"), ("maid_bikini", "메이드 비키니"),
+    ("garter_belt", "가터벨트"), ("fishnets", "망사"), ("open_shirt", "풀어헤친 셔츠"), ("unbuttoned", "단추 풀린"),
+    ("undressing", "옷 벗는 중"), ("shirt_lift", "셔츠 들추기"), ("skirt_lift", "치마 들추기"), ("clothes_pull", "옷 잡아당기기"),
+    ("off_shoulder", "어깨 드러낸"), ("wet_clothes", "젖은 옷"), ("torn_clothes", "찢어진 옷"), ("underwear_only", "속옷만"),
+    ("topless", "상의 탈의"), ("bottomless", "하의 탈의"), ("nude", "전라"), ("bodystocking", "바디스타킹"),
+    ("thigh_strap", "허벅지 스트랩"), ("choker", "초커"), ("collar", "목줄"), ("swimsuit_pull", "수영복 당기기"),
+    ("panties_around_one_leg", "한쪽 다리에 걸친 팬티"), ("bra_lift", "브라 들추기"), ("sideboob", "사이드붑"), ("underboob", "언더붑"),
+]
+Y_POSE = [
+    ("lying", "누워서"), ("on_back", "등을 대고"), ("on_side", "옆으로 누워"), ("on_stomach", "엎드려서"), ("all_fours", "네발 자세"),
+    ("spread_legs", "다리 벌리고"), ("legs_up", "다리 들고"), ("kneeling", "무릎 꿇고"), ("straddling", "올라타서"),
+    ("bent_over", "허리 숙이고"), ("from_behind", "뒤에서"), ("from_above", "위에서"), ("from_below", "아래에서"),
+    ("arched_back", "등 젖히고"), ("leaning_forward", "앞으로 기울여"), ("hands_on_own_chest", "가슴에 손"),
+    ("arms_behind_back", "뒷짐"), ("arms_up", "만세"), ("presenting", "내보이는"), ("seductive_pose", "유혹 포즈"),
+    ("ass_focus", "엉덩이 강조"), ("breast_focus", "가슴 강조"), ("m_legs", "M자 다리"), ("wariza", "여자앉기"),
+    ("top-down_bottom-up", "엎드려 엉덩이 들기"), ("leg_lift", "한 다리 들기"), ("against_wall", "벽에 기대"), ("on_bed", "침대 위"),
+]
+Y_FACE = [
+    ("seductive_smile", "유혹하는 미소"), ("naughty_face", "음흉한 얼굴"), ("blush", "홍조"), ("heavy_breathing", "거친 숨"),
+    ("half-closed_eyes", "반쯤 감은 눈"), ("tongue_out", "혀 내밀기"), ("biting_lip", "입술 깨물기"), ("embarrassed", "부끄러워하며"),
+    ("ahegao", "아헤가오"), ("heart-shaped_pupils", "하트 동공"), ("tears", "눈물"), ("drooling", "침 흘리기"), ("smug", "우쭐한 얼굴"),
+    ("glaring", "노려보기"), ("looking_at_viewer", "카메라 응시"), ("looking_back", "뒤돌아보기"), ("open_mouth", "입 벌리고"),
+    ("sweat", "땀"), ("trembling", "떨면서"), ("wavy_mouth", "물결 입"), ("closed_eyes", "눈 감고"), ("nose_blush", "코까지 홍조"),
+]
+Y_PLACE = [
+    ("bed", "침대"), ("bathroom", "욕실"), ("shower", "샤워실"), ("onsen", "온천"), ("beach", "해변"), ("locker_room", "탈의실"),
+    ("office", "사무실"), ("car_interior", "차 안"), ("pool", "수영장"), ("hotel_room", "호텔방"), ("kitchen", "부엌"), ("couch", "소파"),
+    ("window", "창가"), ("rooftop", "옥상"), ("tent", "텐트"), ("balcony", "발코니"), ("changing_room", "피팅룸"), ("elevator", "엘리베이터"),
+    ("bathtub", "욕조"), ("sauna", "사우나"), ("night", "밤"), ("rain", "빗속"), ("mirror", "거울 앞"), ("stairs", "계단"),
+]
+Y_ACT = [
+    ("kiss", "키스"), ("french_kiss", "딥키스"), ("hug_from_behind", "백허그"), ("groping", "더듬기"), ("breast_grab", "가슴 잡기"),
+    ("licking", "핥기"), ("fingering", "손가락"), ("sex", "섹스"), ("sex_from_behind", "후배위"), ("cowgirl_position", "기승위"),
+    ("missionary", "정상위"), ("doggystyle", "도기"), ("paizuri", "파이즈리"), ("fellatio", "펠라"), ("handjob", "핸드잡"),
+    ("cunnilingus", "커닐링구스"), ("69", "69"), ("masturbation", "자위"), ("bondage", "본디지"), ("shibari", "시바리"),
+    ("blindfold", "안대"), ("leash", "리드줄"), ("spanking", "스팽킹"), ("thigh_sex", "허벅지 섹스"), ("grinding", "그라인딩"),
+    ("nipple_tweak", "유두 자극"), ("ear_licking", "귀 핥기"), ("neck_kiss", "목 키스"), ("lap_pillow", "무릎베개"), ("leg_lock", "다리 감기"),
+    ("after_sex", "사후"), ("implied_sex", "암시"), ("clothed_sex", "옷 입은 채"), ("standing_sex", "선 채로"), ("suspended_congress", "안아 들고"),
+]
+Y_EXTRA = [
+    ("steam", "김"), ("wet", "젖은"), ("sweatdrop", "땀방울"), ("heart", "하트"), ("speech_bubble", "말풍선"), ("motion_lines", "동작선"),
+    ("pov", "1인칭 시점"), ("dutch_angle", "기울인 앵글"), ("close-up", "클로즈업"), ("backlighting", "역광"), ("dim_lighting", "어두운 조명"),
+    ("candle", "촛불"), ("moonlight", "달빛"), ("neon_lights", "네온"), ("rose_petals", "장미 꽃잎"), ("silk_sheets", "실크 시트"),
+    ("condom", "콘돔"), ("lube", "러브젤"), ("vibrator", "바이브"), ("handcuffs", "수갑"), ("whipped_cream", "휘핑크림"), ("ice_cube", "얼음"),
+]
+YACHA_INTRO = [
+    "크크… 이런 건 어때? 이몸 취향으로 골라봤다…", "헤헤, 야차방 전용이다! 딴 데서 말하면 죽는다!",
+    "음흉한 이몸이 나섰다… 각오해라…", "이건 비밀이다? 이몸이 골라준 거 티 내지 마…",
+    "크흐흐… 오늘 밤 그릴 건 이거다…", "야차 소환 완료… 이몸의 뇌내 필터는 꺼졌다…",
+    "쉿… 조용히 받아. 이몸이 특별히 골라준 거니까…", "오호… 이런 걸 원한다고? 이몸도 싫진 않아…",
+]
+YACHA_OUTRO = [
+    "다 그리면 이몸한테 먼저 보여줘… 알겠냐…", "…흥, 딱히 보고 싶어서 고른 건 아니야…", "저장 잊지 마라. 이몸이 챙겨준다…",
+    "수위 조절은 네 몫이다… 이몸은 모른다…", "크크… 감상은 이몸이 한다…", "한 장 더 뽑고 싶으면 또 불러… 언제든…",
+]
+YACHA_KAO = [
+    "( ͡° ͜ʖ ͡°)", "(¬‿¬)", "(⁄ ⁄•⁄ω⁄•⁄ ⁄)", "(๑´ڡ`๑)", "( ˘ ³˘)♥", "(￣ε￣)", "(๑>ᴗ<๑)", "(*´﹃`*)", "(≖‿≖)",
+    "( ͡~ ͜ʖ ͡°)", "(´ω｀*)", "ヽ(´ー`)┌", "(*ﾟ∀ﾟ*)", "( ͡ᵔ ͜ʖ ͡ᵔ )", "(◕‿◕✿)", "(ㆆ_ㆆ)", "(¬ω¬)", "(ᗒᗨᗕ)",
+]
+
+
+def yacha_roll(spicy: bool) -> tuple[str, str]:
+    wear = random.sample(Y_WEAR, 2)
+    pose = random.choice(Y_POSE)
+    face = random.sample(Y_FACE, 2)
+    place = random.choice(Y_PLACE)
+    extra = random.sample(Y_EXTRA, 2)
+    parts = [*wear, pose, *face, place]
+    if spicy:
+        parts.append(random.choice(Y_ACT))
+    parts += extra
+    kor = " + ".join(k for _, k in parts)
+    tags = ", ".join(t for t, _ in parts)
+    return kor, tags
+
+
+@client.tree.command(name="야차", description="[연령제한 채널 전용] 음흉한 이몸이 NSFW 태그를 뽑아준다")
+@app_commands.describe(수위="순한맛=의상·포즈·표정·장소 / 매운맛=행위 포함 (기본)", 횟수="한 번에 뽑을 개수 (1~3)")
+@app_commands.choices(수위=[app_commands.Choice(name="매운맛", value="hot"), app_commands.Choice(name="순한맛", value="mild")])
+async def yacha_cmd(inter: discord.Interaction, 수위: Optional[app_commands.Choice[str]] = None, 횟수: app_commands.Range[int, 1, 3] = 1):
+    if not getattr(inter.channel, "nsfw", False):
+        await inter.response.send_message(
+            f"{inter.user.mention} 여기서 그런 얘길 하면 어떡해! **연령제한 채널(야차방)** 에서만이다! {kao()}", ephemeral=True
+        )
+        return
+    spicy = (수위.value if 수위 else "hot") == "hot"
+    label = "🌶️ 매운맛" if spicy else "🍬 순한맛"
+    body = f"# 😈 야차 {label} {random.choice(YACHA_KAO)}\n{inter.user.mention} {random.choice(YACHA_INTRO)}"
+    for i in range(횟수):
+        kor, tags = yacha_roll(spicy)
+        head = f"**#{i + 1}** " if 횟수 > 1 else ""
+        body += f"\n> {head}**{kor}**\n> 태그: `{tags}`"
+    body += f"\n{random.choice(YACHA_OUTRO)} {random.choice(YACHA_KAO)}"
+    await inter.response.send_message(body)
 
 
 @client.event
