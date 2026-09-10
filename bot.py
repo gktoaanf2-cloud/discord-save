@@ -707,8 +707,9 @@ HELP_FIELDS = [
      "`상대:@누구` 랑 주사위(1d100) 대결! 진 녀석은 이몸이 **사형집행** — 랜덤 코디를 입는 처벌이다! "
      "단보루 태그로 뽑아주니까 그대로 그려! 무승부면 둘 다 벌칙!"),
     ("😈 /야차",
-     "**연령제한 채널(야차방)에서만!** 음흉한 이몸이 NSFW 태그를 랜덤 조합해 준다. "
-     "`수위:순한맛` 은 의상·포즈·표정·장소만, `매운맛`(기본) 은 행위까지. 그대로 그려!"),
+     "**연령제한 채널(야차방)에서만!** 음흉한 이몸이 NSFW 태그를 랜덤 조합해 준다.\n"
+     "`상대:@누구` 붙이면 주사위 대결 → **이긴 놈이 그려온다!** 무승부면 둘 다.\n"
+     "`수위:` 🍬순한맛(의상·포즈·표정·장소) / 🌶️매운맛(+행위, 기본) / 🔥불맛(2인 구도+체위+토이) / ☠️지옥맛(불맛 2배)"),
     ("👑 관리자 전용",
      "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
      "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에 / `/이모지확대 켜기|끄기`"),
@@ -1164,39 +1165,140 @@ YACHA_KAO = [
 ]
 
 
-def yacha_roll(spicy: bool) -> tuple[str, str]:
-    wear = random.sample(Y_WEAR, 2)
-    pose = random.choice(Y_POSE)
-    face = random.sample(Y_FACE, 2)
-    place = random.choice(Y_PLACE)
-    extra = random.sample(Y_EXTRA, 2)
-    parts = [*wear, pose, *face, place]
-    if spicy:
+Y_PAIR = [("1boy, 1girl", "남녀"), ("2girls", "백합"), ("2boys", "BL"), ("1boy, 1girl", "남녀"), ("2girls, yuri", "백합")]
+Y_POSE2 = [  # 2인 자세
+    ("face-to-face", "마주보고"), ("hug", "포옹"), ("hug_from_behind", "백허그"), ("holding_hands", "손잡고"),
+    ("interlocked_fingers", "깍지"), ("leg_between_thighs", "허벅지 사이 다리"), ("sitting_on_lap", "무릎 위에 앉아"),
+    ("princess_carry", "공주님 안기"), ("pinned_down", "눌러 제압"), ("wrist_grab", "손목 잡기"), ("kabedon", "벽쿵"),
+    ("spooning", "스푼 자세"), ("lying_on_person", "위에 엎드려"), ("cheek-to-cheek", "볼 맞대기"),
+    ("forehead-to-forehead", "이마 맞대기"), ("hand_on_another's_cheek", "볼 감싸기"), ("hand_on_another's_head", "머리 쓰다듬기"),
+    ("arm_around_waist", "허리 감싸안기"), ("hand_under_clothes", "옷 속에 손"), ("carrying_person", "안아 들기"),
+    ("licking_another's_neck", "목 핥기"), ("ear_biting", "귀 깨물기"), ("hand_on_another's_thigh", "허벅지에 손"),
+    ("chin_grab", "턱 잡기"), ("hair_pull", "머리채 잡기"), ("leg_lock", "다리로 감싸기"), ("legs_over_head", "다리 머리 위로"),
+    ("held_up", "들어 올려진"), ("straddling_another", "상대 위에 올라타"), ("head_between_thighs", "허벅지 사이 얼굴"),
+    ("mutual_undressing", "서로 옷 벗기기"), ("bathing_together", "같이 목욕"), ("sleeping_together", "같이 잠들어"),
+]
+Y_ACT_HOT = [  # 체위·행위 (불맛↑)
+    ("vaginal", "삽입"), ("anal", "애널"), ("mating_press", "메이팅 프레스"), ("full_nelson", "풀넬슨"), ("piledriver_(sex)", "파일드라이버"),
+    ("reverse_cowgirl_position", "역기승위"), ("spooning_sex", "스푼 체위"), ("prone_bone", "프론본"), ("amazon_position", "아마존 체위"),
+    ("lotus_position", "연꽃 체위"), ("wheelbarrow_(sex)", "손수레 체위"), ("standing_sex", "선 채로"), ("suspended_congress", "안아 들고"),
+    ("deepthroat", "딥스로트"), ("irrumatio", "이라마치오"), ("footjob", "풋잡"), ("tribadism", "트리바디즘"), ("scissoring", "가위 체위"),
+    ("strap-on", "스트랩온"), ("pegging", "페깅"), ("anilingus", "아닐링구스"), ("fingering", "손가락 삽입"), ("double_penetration", "더블"),
+    ("breast_sucking", "가슴 빨기"), ("nipple_sucking", "유두 빨기"), ("mutual_masturbation", "상호 자위"), ("frottage", "프로타주"),
+    ("clothed_sex", "옷 입은 채 섹스"), ("sex_from_behind", "후배위"), ("cowgirl_position", "기승위"), ("missionary", "정상위"),
+    ("doggystyle", "도기"), ("paizuri", "파이즈리"), ("fellatio", "펠라"), ("cunnilingus", "커닐링구스"), ("69", "69"),
+    ("thigh_sex", "허벅지 섹스"), ("grinding", "그라인딩"), ("exhibitionism", "노출 플레이"), ("bondage", "본디지"), ("shibari", "시바리"),
+    ("spanking", "스팽킹"), ("wax_play", "촛농 플레이"), ("orgasm", "절정"), ("torogao", "토로가오"), ("after_sex", "사후"),
+]
+Y_JUICE = [  # 체액·토이·소품
+    ("cum", "정액"), ("creampie", "질내사정"), ("cum_on_body", "몸에 사정"), ("cum_in_mouth", "입안 사정"), ("facial", "얼굴 사정"),
+    ("cum_string", "정액 실"), ("excessive_cum", "과다 사정"), ("overflow", "넘쳐흐름"), ("squirting", "분수"), ("female_ejaculation", "여성 사정"),
+    ("pussy_juice", "애액"), ("saliva_trail", "침 실"), ("sweat", "땀범벅"), ("afterglow", "여운"), ("condom", "콘돔"), ("used_condom", "쓴 콘돔"),
+    ("lube", "러브젤"), ("vibrator", "바이브"), ("remote_control_vibrator", "리모컨 바이브"), ("dildo", "딜도"), ("anal_beads", "애널비즈"),
+    ("nipple_clamps", "니플 클램프"), ("ball_gag", "볼개그"), ("handcuffs", "수갑"), ("blindfold", "안대"), ("leash", "리드줄"),
+    ("sex_toy", "장난감"), ("egg_vibrator", "에그"), ("whipped_cream", "휘핑크림"), ("ice_cube", "얼음"), ("body_writing", "바디 라이팅"),
+    ("hickey", "키스마크"), ("bite_mark", "이빨 자국"), ("rope", "로프"), ("collar", "목줄"), ("stomach_bulge", "배 불룩"),
+]
+Y_TIERS = {
+    "mild": ("🍬 순한맛", 0), "hot": ("🌶️ 매운맛", 1), "fire": ("🔥 불맛", 2), "hell": ("☠️ 지옥맛", 3),
+}
+
+
+def yacha_roll(tier: str) -> tuple[str, str]:
+    """tier: mild / hot / fire / hell → (한글, 태그)."""
+    lvl = Y_TIERS[tier][1]
+    parts = []
+    if lvl >= 2:
+        parts.append(random.choice(Y_PAIR))
+    parts += random.sample(Y_WEAR, 1 if lvl >= 3 else 2)
+    if lvl >= 2:
+        parts.append(random.choice(Y_POSE2))
+        if lvl >= 3:
+            parts.append(random.choice(Y_POSE))
+    else:
+        parts.append(random.choice(Y_POSE))
+    parts += random.sample(Y_FACE, 2)
+    parts.append(random.choice(Y_PLACE))
+    if lvl == 1:
         parts.append(random.choice(Y_ACT))
-    parts += extra
+    elif lvl == 2:
+        parts.append(random.choice(Y_ACT_HOT))
+        parts.append(random.choice(Y_JUICE))
+    elif lvl >= 3:
+        parts += random.sample(Y_ACT_HOT, 2)
+        parts += random.sample(Y_JUICE, 2)
+    parts += random.sample(Y_EXTRA, 1 if lvl >= 2 else 2)
     kor = " + ".join(k for _, k in parts)
     tags = ", ".join(t for t, _ in parts)
     return kor, tags
 
 
+YACHA_WIN = [
+    "크크… 이겼군. 그럼 **네가** 그려온다! 이몸이 기다리지…", "승자 결정… 상이다. 이몸이 고른 걸 그려와…",
+    "오호, 운도 좋아… 자, 그려올 건 이거다…", "승리의 대가는 붓질이다… 크흐흐…",
+]
+YACHA_TIE = ["무승부… 그럼 둘 다 그려와. 이몸은 두 배로 즐긴다…", "동점이냐… 좋아, 둘 다 붓 들어…"]
+
+
+def yacha_block(target: str, tier: str, n: int) -> str:
+    out = ""
+    for i in range(n):
+        kor, tags = yacha_roll(tier)
+        head = f"**#{i + 1}** " if n > 1 else ""
+        out += f"\n> {head}**{kor}**\n> 태그: `{tags}`"
+    return out
+
+
 @client.tree.command(name="야차", description="[연령제한 채널 전용] 음흉한 이몸이 NSFW 태그를 뽑아준다")
-@app_commands.describe(수위="순한맛=의상·포즈·표정·장소 / 매운맛=행위 포함 (기본)", 횟수="한 번에 뽑을 개수 (1~3)")
-@app_commands.choices(수위=[app_commands.Choice(name="매운맛", value="hot"), app_commands.Choice(name="순한맛", value="mild")])
-async def yacha_cmd(inter: discord.Interaction, 수위: Optional[app_commands.Choice[str]] = None, 횟수: app_commands.Range[int, 1, 3] = 1):
+@app_commands.describe(
+    상대="주사위 대결 상대. 이긴 쪽이 그려온다 (비우면 혼자 뽑기)",
+    수위="🍬순한맛 / 🌶️매운맛(기본) / 🔥불맛(2인·체위·토이) / ☠️지옥맛(불맛 2배)",
+    횟수="한 번에 뽑을 개수 (1~3)",
+)
+@app_commands.choices(수위=[
+    app_commands.Choice(name="🌶️ 매운맛", value="hot"), app_commands.Choice(name="🍬 순한맛", value="mild"),
+    app_commands.Choice(name="🔥 불맛", value="fire"), app_commands.Choice(name="☠️ 지옥맛", value="hell"),
+])
+async def yacha_cmd(
+    inter: discord.Interaction,
+    상대: Optional[discord.Member] = None,
+    수위: Optional[app_commands.Choice[str]] = None,
+    횟수: app_commands.Range[int, 1, 3] = 1,
+):
     if not getattr(inter.channel, "nsfw", False):
         await inter.response.send_message(
             f"{inter.user.mention} 여기서 그런 얘길 하면 어떡해! **연령제한 채널(야차방)** 에서만이다! {kao()}", ephemeral=True
         )
         return
-    spicy = (수위.value if 수위 else "hot") == "hot"
-    label = "🌶️ 매운맛" if spicy else "🍬 순한맛"
-    body = f"# 😈 야차 {label} {random.choice(YACHA_KAO)}\n{inter.user.mention} {random.choice(YACHA_INTRO)}"
-    for i in range(횟수):
-        kor, tags = yacha_roll(spicy)
-        head = f"**#{i + 1}** " if 횟수 > 1 else ""
-        body += f"\n> {head}**{kor}**\n> 태그: `{tags}`"
+    tier = 수위.value if 수위 else "hot"
+    label = Y_TIERS[tier][0]
+    a = inter.user
+    if not 상대 or 상대.id == a.id:
+        body = f"# 😈 야차 {label} {random.choice(YACHA_KAO)}\n{a.mention} {random.choice(YACHA_INTRO)}"
+        body += yacha_block(a.mention, tier, 횟수)
+        body += f"\n{random.choice(YACHA_OUTRO)} {random.choice(YACHA_KAO)}"
+        await inter.response.send_message(body)
+        return
+    b = 상대
+    head = f"# 😈 야차 대결 {label} · {a.display_name} vs {b.display_name}\n{random.choice(YACHA_INTRO)} {random.choice(YACHA_KAO)}"
+    await inter.response.send_message(head)
+    await asyncio.sleep(1.5)
+    ra, rb = random.randint(1, 100), random.randint(1, 100)
+    body = f"{head}\n{dice_line(a.mention, ra)}\n{dice_line(b.mention, rb)}\n"
+    if ra == rb:
+        body += f"# 🤝 {ra} : {rb} 무승부!\n{random.choice(YACHA_TIE)} {random.choice(YACHA_KAO)}"
+        body += f"\n{a.mention}" + yacha_block(a.mention, tier, 횟수)
+        body += f"\n{b.mention}" + yacha_block(b.mention, tier, 횟수)
+    else:
+        win = a if ra > rb else b
+        if win.id == client.user.id:
+            body += f"# 🏆 이몸 승리!\n이몸이 이겼지만… 이몸은 붓을 못 잡아. **{a.mention}** 네가 대신 그려와! 크크…"
+            win = a
+        else:
+            body += f"# 🏆 {win.display_name} 승리!\n{win.mention} {random.choice(YACHA_WIN)}"
+        body += yacha_block(win.mention, tier, 횟수)
     body += f"\n{random.choice(YACHA_OUTRO)} {random.choice(YACHA_KAO)}"
-    await inter.response.send_message(body)
+    await inter.edit_original_response(content=body)
 
 
 @client.event
