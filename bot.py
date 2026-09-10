@@ -1204,33 +1204,62 @@ Y_TIERS = {
 }
 
 
-def yacha_roll(tier: str) -> tuple[str, str]:
-    """tier: mild / hot / fire / hell → (한글, 태그)."""
+# 역할별 풀 (2인용)
+Y_FACE_TOP = [
+    ("smug", "우쭐한 얼굴"), ("seductive_smile", "유혹하는 미소"), ("naughty_face", "음흉한 얼굴"), ("glaring", "노려보기"),
+    ("half-closed_eyes", "반쯤 감은 눈"), ("licking_lips", "입술 핥기"), ("grin", "씩 웃기"), ("evil_smile", "사악한 미소"),
+    ("looking_down", "내려다보기"), ("shaded_face", "그늘진 얼굴"), ("heavy_breathing", "거친 숨"), ("sweat", "땀"),
+    ("expressionless", "무표정"), ("serious", "진지한 얼굴"), ("tongue_out", "혀 내밀기"), ("biting_lip", "입술 깨물기"),
+]
+Y_FACE_BOT = [
+    ("blush", "홍조"), ("ahegao", "아헤가오"), ("tears", "눈물"), ("trembling", "떨면서"), ("heavy_breathing", "거친 숨"),
+    ("embarrassed", "부끄러워하며"), ("heart-shaped_pupils", "하트 동공"), ("drooling", "침 흘리기"), ("wavy_mouth", "물결 입"),
+    ("open_mouth", "입 벌리고"), ("closed_eyes", "눈 감고"), ("rolling_eyes", "눈 뒤집힘"), ("nose_blush", "코까지 홍조"),
+    ("looking_at_viewer", "카메라 응시"), ("looking_back", "뒤돌아보기"), ("torogao", "토로가오"), ("crying", "울면서"),
+    ("pleading", "애원하는"), ("half-closed_eyes", "반쯤 감은 눈"), ("scared", "겁먹은"), ("surprised", "놀란"),
+]
+Y_POSE_TOP = [
+    ("from_behind", "뒤에서"), ("from_above", "위에서"), ("straddling", "올라타서"), ("leaning_forward", "앞으로 기울여"),
+    ("standing", "선 채로"), ("kneeling", "무릎 꿇고"), ("sitting", "앉아서"), ("holding_leg", "다리 붙잡고"),
+    ("hand_on_another's_head", "머리 누르고"), ("grabbing_from_behind", "뒤에서 붙잡고"), ("arm_grab", "팔 잡고"),
+    ("thrusting", "밀어붙이며"), ("looming", "덮치듯이"), ("crouching", "쪼그려"), ("one_knee", "한 무릎"),
+]
+Y_POSE_BOT = [
+    ("lying", "누워서"), ("on_back", "등을 대고"), ("on_stomach", "엎드려서"), ("all_fours", "네발 자세"), ("spread_legs", "다리 벌리고"),
+    ("legs_up", "다리 들고"), ("bent_over", "허리 숙이고"), ("arched_back", "등 젖히고"), ("m_legs", "M자 다리"), ("wariza", "여자앉기"),
+    ("top-down_bottom-up", "엎드려 엉덩이 들기"), ("leg_lift", "한 다리 들기"), ("arms_up", "만세"), ("arms_behind_back", "뒷짐"),
+    ("presenting", "내보이는"), ("on_side", "옆으로 누워"), ("knees_together_feet_apart", "무릎 모으고"), ("legs_together", "다리 모으고"),
+    ("hands_on_own_chest", "가슴에 손"), ("covering_face", "얼굴 가리기"), ("grabbing_sheets", "시트 움켜쥐기"),
+]
+
+
+def _join(parts):
+    return " + ".join(k for _, k in parts), ", ".join(t for t, _ in parts)
+
+
+def yacha_roll(tier: str) -> list[tuple[str, str, str]]:
+    """tier: mild / hot / fire / hell → [(라벨, 한글, 태그), …]. 2인 수위는 공통/탑/바텀 3줄."""
     lvl = Y_TIERS[tier][1]
-    parts = []
-    if lvl >= 2:
-        parts.append(random.choice(Y_PAIR))
-    parts += random.sample(Y_WEAR, 1 if lvl >= 3 else 2)
-    if lvl >= 2:
-        parts.append(random.choice(Y_POSE2))
-        if lvl >= 3:
-            parts.append(random.choice(Y_POSE))
-    else:
+    if lvl < 2:
+        parts = random.sample(Y_WEAR, 2)
         parts.append(random.choice(Y_POSE))
-    parts += random.sample(Y_FACE, 2)
-    parts.append(random.choice(Y_PLACE))
-    if lvl == 1:
-        parts.append(random.choice(Y_ACT))
-    elif lvl == 2:
-        parts.append(random.choice(Y_ACT_HOT))
-        parts.append(random.choice(Y_JUICE))
-    elif lvl >= 3:
-        parts += random.sample(Y_ACT_HOT, 2)
-        parts += random.sample(Y_JUICE, 2)
-    parts += random.sample(Y_EXTRA, 1 if lvl >= 2 else 2)
-    kor = " + ".join(k for _, k in parts)
-    tags = ", ".join(t for t, _ in parts)
-    return kor, tags
+        parts += random.sample(Y_FACE, 2)
+        parts.append(random.choice(Y_PLACE))
+        if lvl == 1:
+            parts.append(random.choice(Y_ACT))
+        parts += random.sample(Y_EXTRA, 2)
+        return [("", *_join(parts))]
+    n_act = 2 if lvl >= 3 else 1
+    common = [random.choice(Y_PAIR), random.choice(Y_POSE2), random.choice(Y_PLACE)]
+    common += random.sample(Y_ACT_HOT, n_act)
+    common += random.sample(Y_JUICE, n_act)
+    common.append(random.choice(Y_EXTRA))
+    top = [random.choice(Y_WEAR), random.choice(Y_FACE_TOP), random.choice(Y_POSE_TOP)]
+    bot = [random.choice(Y_WEAR), *random.sample(Y_FACE_BOT, 2 if lvl >= 3 else 1), random.choice(Y_POSE_BOT)]
+    if lvl >= 3:
+        top.append(random.choice(Y_JUICE))
+        bot.append(random.choice(Y_JUICE))
+    return [("공통", *_join(common)), ("🔝 탑", *_join(top)), ("🔻 바텀", *_join(bot))]
 
 
 YACHA_WIN = [
@@ -1243,9 +1272,16 @@ YACHA_TIE = ["무승부… 그럼 둘 다 그려와. 이몸은 두 배로 즐긴
 def yacha_block(target: str, tier: str, n: int) -> str:
     out = ""
     for i in range(n):
-        kor, tags = yacha_roll(tier)
+        rows = yacha_roll(tier)
         head = f"**#{i + 1}** " if n > 1 else ""
-        out += f"\n> {head}**{kor}**\n> 태그: `{tags}`"
+        if len(rows) == 1:
+            _, kor, tags = rows[0]
+            out += f"\n> {head}**{kor}**\n> 태그: `{tags}`"
+        else:
+            if head:
+                out += f"\n> {head}"
+            for label, kor, tags in rows:
+                out += f"\n> **{label}** {kor}\n> `{tags}`"
     return out
 
 
