@@ -1254,8 +1254,9 @@ def yacha_roll(tier: str) -> list[tuple[str, str, str]]:
     common += random.sample(Y_ACT_HOT, n_act)
     common += random.sample(Y_JUICE, n_act)
     common.append(random.choice(Y_EXTRA))
-    top = [random.choice(Y_WEAR), random.choice(Y_FACE_TOP), random.choice(Y_POSE_TOP)]
-    bot = [random.choice(Y_WEAR), *random.sample(Y_FACE_BOT, 2 if lvl >= 3 else 1), random.choice(Y_POSE_BOT)]
+    w_top, w_bot = random.sample(Y_WEAR, 2)
+    top = [w_top, random.choice(Y_FACE_TOP), random.choice(Y_POSE_TOP)]
+    bot = [w_bot, *random.sample(Y_FACE_BOT, 2 if lvl >= 3 else 1), random.choice(Y_POSE_BOT)]
     if lvl >= 3:
         top.append(random.choice(Y_JUICE))
         bot.append(random.choice(Y_JUICE))
