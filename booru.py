@@ -298,6 +298,8 @@ BOT_GIVE_RE = re.compile(r"grabbing_another|grabbing_from|hand_on_another|hands_
                          r"mounting|humping|ejaculat|pull_out|holding_own_penis|hips_grab|hand_on_head|hands_on_head|spanking|"
                          r"dominat|smug|evil_smile|looking_down|licking_penis|penis_on|penis_over|penis_in|penis_to|penis_under|"
                          r"cum_on_hands|cumdrip_from_penis|precum|erection|testicles|foreskin")
+RESTRAIN_RE = re.compile(r"bound|gagged|gag$|leash|collar|cuffs|blindfold|shibari|rope|chained|restrained|bondage|"
+                         r"deepthroat|irrumatio|throat|asphyxiation|strangling|choking|pinned")
 PAIR = {
     "HL": {"common_ban": FEM_TOP_RE, "top_ban": FEMALE_RE, "bot_ban": re.compile(r"^(penis|testicles|erection|foreskin|flaccid|half-erect|bulge|erection_under_clothes|precum|male_pubic_hair)$"),
            "top_k": "", "bot_k": "", "count": "2people, couple"},
@@ -483,6 +485,9 @@ def roll_scene(B: "Booru", level: int, ext: dict | None = None, pair: str = "HL"
     top = sc.from_related(a, TOP_RE, 2 if hard else 1, top=True)
     top += sc.from_pool(T_ACT | T_POSE, max(0, (2 if hard else 1) - len(top)), top=True, pattern=TOP_RE)
     top_wear = sc.from_related(a, CLOTHED_RE, 1, top=True) or sc.from_pool(T_EXPO | T_WEAR, 1, top=True)
+    # 탑 구속·목구멍·브레스 슬롯 (불맛↑, 절반 확률)
+    if random.random() < 0.5:
+        top += sc.from_pool({"성인용 → 페티시", VIOLENCE_TOPIC, "성인용 → 행위", "성인용 → 자세"}, 1, top=True, pattern=RESTRAIN_RE)
     top_all = top_wear + top + E("face_top", 1)
     sc.role = "bot"
     bot = sc.from_related(a, BOT_RE, 2 if hard else 1)
