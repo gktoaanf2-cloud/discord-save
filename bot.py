@@ -1289,7 +1289,7 @@ def yacha_roll_booru(tier: str, pair: str = "HL") -> dict:
     return _booru.roll_scene(BOORU, lvl, ext, pair)
 
 
-NAI_DEFAULT = "fake magazine cover, holographic lighting, photoshoot"
+NAI_DEFAULT = ""
 PAIR_LABEL = {"HL": "HL 남×여", "BL": "BL 남×남", "GL": "GL 여×여"}
 
 
@@ -1332,8 +1332,8 @@ def yacha_block(target: str, tier: str, n: int, detail: bool = False, pair: str 
             else:
                 allitems = sc["common"] + sc["top"] + sc["bot"]
                 out += f"\n**🔥 공용** {_booru.fmt(sc['common'])[0]}\n" + nai_block(sc["common"], "nsfw, " + P["count"], NAI_DEFAULT)
-                out += f"\n**🔝 탑({P['top_k']})** {_booru.fmt(sc['top'])[0]}\n" + nai_block(sc["top"])
-                out += f"\n**🔻 바텀({P['bot_k']})** {_booru.fmt(sc['bot'])[0]}\n" + nai_block(sc["bot"])
+                out += f"\n**🔝 탑** {_booru.fmt(sc['top'])[0]}\n" + nai_block(sc["top"])
+                out += f"\n**🔻 바텀** {_booru.fmt(sc['bot'])[0]}\n" + nai_block(sc["bot"])
             if detail:
                 det = yacha_detail(allitems)
                 if det:

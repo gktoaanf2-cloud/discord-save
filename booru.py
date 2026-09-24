@@ -244,7 +244,7 @@ TOP_RE = re.compile(r"grabbing_another|grabbing_from|hand_on_another|hands_on_an
                     r"pinning|pinned|looming|thrusting|guided|guiding|licking_|sucking|biting|pulling_another|hair_pull|"
                     r"hand_under|caress|spanking|fingering|nipple_tweak|groping|breast_grab|ass_grab|head_grab|chin_grab|"
                     r"wrist_grab|arm_grab|leg_grab|thigh_grab|hand_on_head|hands_on_head|hand_in_another|dominat|mounting|humping|"
-                    r"cum_on|facial|bukkake|ejaculat|pull_out|holding_own_penis|hands_on_hips|hips_grab")
+                    r"ejaculat|pull_out|holding_own_penis|hands_on_hips|hips_grab")
 BOT_RE = re.compile(r"ahegao|torogao|fucked_silly|rolling_eyes|tears|crying|trembling|pleading|orgasm|female_orgasm|afterglow|"
                     r"pillow_grab|sheet_grab|head_on_pillow|grabbing_own|spreading_own|presenting|arched_back|legs_up|spread_legs|"
                     r"m_legs|on_back|all_fours|bent_over|clothing_aside|panties_aside|_aside$|_lift$|_pull$|_slip$|breasts_out|"
@@ -276,13 +276,27 @@ FEMALE_RE = re.compile(r"pussy|vulva|labia|clitor|cameltoe|areola|breast|cleavag
                        r"pussy_juice|cum_in_pussy|creampie|sideboob|underboob|virgin_killer|naked_apron|sitting_on_face")
 FEM_TOP_RE = re.compile(r"cowgirl|girl_on_top|amazon|femdom|assertive_female|upright_straddle|sitting_on_(face|person|lap)|"
                         r"straddling|riding|reverse_suspended|face_sitting|thigh_straddling|dominatrix|lap")
+# 탑에게 금지 = 당하는 쪽 태그 / 바텀에게 금지 = 하는 쪽 태그
+TOP_RECV_RE = re.compile(r"cum_in|cum_on|cum_(?!drip_from_penis)|facial|bukkake|creampie|penetrated|_penetration|deepthroat|throat|"
+                         r"swallow|fucked|pinned|restrained|bound|bondage|gagged|gag$|blindfold|leash|collar|cuffs|chained|shibari|rope|"
+                         r"spanked|molest|ahegao|torogao|rolling_eyes|fucked_silly|pleading|trembling|pussy_juice|squirt|female_orgasm|"
+                         r"orgasm|afterglow|after_|_aside|_lift$|_pull$|_slip$|_peek$|breasts_out|spread|presenting|legs_up|m_legs|on_back|"
+                         r"all_fours|bent_over|arched|sheet_grab|pillow_grab|covering|embarrassed|scared|crying|tears|imminent|"
+                         r"sitting_on_face|sitting_on_person|riding|straddling|_insertion|anal_|vaginal|object_insertion|vibrator|dildo|"
+                         r"anal_beads|egg_vibrator|sex_toy|tucked|penis_awe|breast_sucking|nipple_stimulation|licking_(?!penis)|"
+                         r"clothed_female|clothed_male|nude_male|nude_female")
+BOT_GIVE_RE = re.compile(r"grabbing_another|grabbing_from|hand_on_another|hands_on_another|holding_another|holding_leg|torso_grab|"
+                         r"pinning|looming|thrusting|guiding|hair_pull|hand_under|chin_grab|wrist_grab|arm_grab|leg_grab|thigh_grab|"
+                         r"mounting|humping|ejaculat|pull_out|holding_own_penis|hips_grab|hand_on_head|hands_on_head|spanking|"
+                         r"dominat|smug|evil_smile|looking_down|licking_penis|penis_on|penis_over|penis_in|penis_to|penis_under|"
+                         r"cum_on_hands|cumdrip_from_penis|precum|erection|testicles|foreskin")
 PAIR = {
     "HL": {"common_ban": FEM_TOP_RE, "top_ban": FEMALE_RE, "bot_ban": re.compile(r"^(penis|testicles|erection|foreskin|flaccid|half-erect|bulge|erection_under_clothes|precum|male_pubic_hair)$"),
-           "top_k": "남", "bot_k": "여", "count": "2people, couple, 1boy, 1girl"},
+           "top_k": "", "bot_k": "", "count": "2people, couple"},
     "BL": {"common_ban": FEMALE_RE, "top_ban": FEMALE_RE, "bot_ban": FEMALE_RE,
-           "top_k": "남", "bot_k": "남", "count": "2people, couple, 2boys"},
+           "top_k": "", "bot_k": "", "count": "2people, couple"},
     "GL": {"common_ban": MALE_RE, "top_ban": MALE_RE, "bot_ban": MALE_RE,
-           "top_k": "여", "bot_k": "여", "count": "2people, couple, 2girls"},
+           "top_k": "", "bot_k": "", "count": "2people, couple"},
 }
 SOLO_BAN = {"HL": MALE_RE, "GL": MALE_RE, "BL": FEMALE_RE}
 
@@ -313,9 +327,14 @@ class Scene:
             return True
         if self.role == "common" and P["common_ban"].search(tag):
             return True
-        if self.role == "top" and (P["top_ban"].search(tag) or (self.pair == "HL" and FEM_TOP_RE.search(tag))):
+        if self.role == "top" and (P["top_ban"].search(tag) or TOP_RECV_RE.search(tag) or (self.pair == "HL" and FEM_TOP_RE.search(tag))):
             return True
-        if self.role == "bot" and P["bot_ban"].search(tag):
+        if self.role == "bot" and (P["bot_ban"].search(tag) or BOT_GIVE_RE.search(tag)):
+            return True
+        # 공용: 조합별 방향 불일치 (HL 남성 삽입당함 등)
+        if self.role == "common" and self.pair == "HL" and re.search(r"male_penetrated|prostate|pegging|reverse_spitroast|cuntboy|penis_on_face$", tag) and False:
+            return True
+        if self.role == "common" and self.pair == "HL" and re.search(r"male_penetrated|prostate|anal_fingering|anal_object_insertion_male", tag):
             return True
         return False
 
