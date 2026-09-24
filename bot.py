@@ -1068,7 +1068,7 @@ def roll_outfit() -> tuple[str, str]:
     extra = random.choice(W_EXTRAS)
     kor = f"{c1[1]} {outfit[1]} + {c2[1]} {leg[1]} + {head[1]} + {accs[0][1]} + {accs[1][1]} + {extra[1]}"
     tags = f"{c1[0]} {outfit[0]}, {c2[0]} {leg[0]}, {head[0]}, {accs[0][0]}, {accs[1][0]}, {extra[0]}"
-    return kor, tags
+    return kor, _booru.nai(tags)
 
 
 def punish_block(victim: str) -> str:
@@ -1282,40 +1282,11 @@ YACHA_TIE = ["무승부… 그럼 둘 다 그려와. 이몸은 두 배로 즐긴
 
 
 def yacha_roll_booru(tier: str) -> list[tuple[str, list[dict]]]:
-    """booru 풀 기반. [(라벨, [item…])]. 2인 수위는 공통/탑/바텀."""
+    """booru 앵커 기반 장면. 내장 표정·2인 자세·장소·연출은 장면 검사를 거쳐 합류."""
     lvl = Y_TIERS[tier][1]
-    B = BOORU
-    used: set[str] = set()
-
-    def take(level, k, top=False, topics=None):
-        got = B.pick(level, k, exclude=used, top=top, topic_in=topics)
-        used.update(x["n"] for x in got)
-        return got
-
-    T_EXPO, T_WEAR = {"성인용 → 노출", "복장 및 악세서리 → 상태"}, {"성인용 → 복장 및 악세서리"}
-    T_POSE, T_MOOD = {"성인용 → 자세", "포즈 → 어필 자세"}, {"성인용 → 상태 및 분위기 및 감정"}
-    T_BODY, T_ACT = {"성인용 → 신체", "인물 → 신체 상태 및 변형"}, {"성인용 → 행위"}
-    T_FLUID, T_TOY = {"성인용 → 액체"}, {"성인용 → 성인용품", "성인용 → 기타"}
-    site = [random.choice(Y_PLACE)]
-    site_items = [{"n": t, "k": k, "d": "", "topic": "장소"} for t, k in site]
-    if lvl < 2:
-        parts = take(0, 2, topics=T_EXPO | T_WEAR) + take(lvl, 1, topics=T_POSE) + [{"n": t, "k": k, "d": "", "topic": ""} for t, k in random.sample(Y_FACE, 2)]
-        if lvl == 1:
-            parts += take(1, 1, topics=T_BODY) + take(1, 1, topics=T_MOOD)
-        parts += site_items + [{"n": t, "k": k, "d": "", "topic": ""} for t, k in random.sample(Y_EXTRA, 1)]
-        return [("", parts)]
-    n_act = 2 if lvl >= 3 else 1
-    common = [{"n": "2people, couple", "k": "커플", "d": "", "topic": ""}]
-    common += [{"n": t, "k": k, "d": "", "topic": ""} for t, k in [random.choice(Y_POSE2)]]
-    common += take(2, n_act, topics=T_ACT) + take(2, 1, topics=T_POSE) + take(2, n_act, topics=T_FLUID | T_TOY) + site_items
-    top = take(2, 1, top=True, topics=T_EXPO | T_WEAR) + [{"n": t, "k": k, "d": "", "topic": ""} for t, k in [random.choice(Y_FACE_TOP), random.choice(Y_POSE_TOP)]]
-    top += take(2, 1, top=True, topics=T_BODY | T_MOOD)
-    bot = take(2, 1, topics=T_EXPO | T_WEAR) + [{"n": t, "k": k, "d": "", "topic": ""} for t, k in random.sample(Y_FACE_BOT, 2 if lvl >= 3 else 1)]
-    bot += [{"n": t, "k": k, "d": "", "topic": ""} for t, k in [random.choice(Y_POSE_BOT)]] + take(2, 1, topics=T_BODY | T_MOOD)
-    if lvl >= 3:
-        top += take(3, 1, top=True, topics=T_FLUID | T_TOY)
-        bot += take(3, 1, topics=T_FLUID | T_TOY)
-    return [("공통", common), ("🔝 탑", top), ("🔻 바텀", bot)]
+    ext = {"face": Y_FACE, "face_top": Y_FACE_TOP, "face_bot": Y_FACE_BOT, "pose2": Y_POSE2, "place": Y_PLACE, "extra": Y_EXTRA}
+    rows = _booru.roll_scene(BOORU, lvl, ext)
+    return [(lab, items) for lab, items in rows if items]
 
 
 def yacha_detail(items: list[dict], k: int = 3) -> str:
@@ -1326,7 +1297,7 @@ def yacha_detail(items: list[dict], k: int = 3) -> str:
             continue
         rel = [r for r in BOORU.related(it["n"], 10) if r["n"] not in {x["n"] for x in items}][:k]
         d = f" — {it['d']}" if it.get("d") else ""
-        r = (" ▸ 세부: " + ", ".join(f"`{x['n']}`({x['k']})" for x in rel)) if rel else ""
+        r = (" ▸ 세부: " + ", ".join(f"`{_booru.nai(x['n'])}`({x['k']})" for x in rel)) if rel else ""
         if d or r:
             lines.append(f"> · **{it['k']}**{d}{r}")
     return "\n".join(lines)
@@ -1342,13 +1313,13 @@ def yacha_block(target: str, tier: str, n: int, detail: bool = False) -> str:
             if head:
                 out += f"\n> {head}"
             allitems = []
+            alltags = []
             for label, items in rows:
                 kor, tags = _booru.fmt(items)
                 allitems += items
-                if label:
-                    out += f"\n> **{label}** {kor}\n> `{tags}`"
-                else:
-                    out += f"\n> **{kor}**\n> 태그: `{tags}`"
+                alltags.append(tags)
+                out += f"\n> **{label}** {kor}"
+            out += "\n> ```\n> " + ", ".join(t for t in alltags if t) + "\n> ```"
             if detail:
                 det = yacha_detail(allitems)
                 if det:
@@ -1399,9 +1370,10 @@ def violence_block(n: int, detail: bool) -> str:
         non = random.sample(BOORU.noncon, min(2, len(BOORU.noncon)))
         mood = [{"n": t, "k": k, "d": ""} for t, k in random.sample(Y_FACE_BOT, 2)]
         site = [{"n": t, "k": k, "d": ""} for t, k in [random.choice(Y_PLACE)]]
-        items = vio + non + mood + site
-        kor, tags = _booru.fmt(items)
-        out += f"\n> {head}**{kor}**\n> 태그: `{tags}`"
+        kor_v, t_v = _booru.fmt(vio)
+        kor_n, t_n = _booru.fmt(non)
+        kor_m, t_m = _booru.fmt(mood + site)
+        out += f"\n> {head}**🩸 유혈** {kor_v}\n> **⛓️ 강압** {kor_n}\n> **💭 상태·장소** {kor_m}\n> ```\n> {t_v}, {t_n}, {t_m}\n> ```"
         if detail:
             det = yacha_detail(vio + non)
             if det:
