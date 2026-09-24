@@ -274,8 +274,9 @@ FEMALE_RE = re.compile(r"pussy|vulva|labia|clitor|cameltoe|areola|breast|cleavag
                        r"maebari|panties|panty|thong|g-string|c-string|garter|bodystocking|dress|skirt|leotard|camisole|slingshot|"
                        r"bridal|cupless|crotchless|stockings|thighhigh|pantyhose|heels|maid|nurse|frill|lace|buruma|girl|squirt|"
                        r"pussy_juice|cum_in_pussy|creampie|sideboob|underboob|virgin_killer|naked_apron|sitting_on_face")
-FEM_TOP_RE = re.compile(r"cowgirl|girl_on_top|amazon|femdom|assertive_female|upright_straddle|sitting_on_(face|person|lap)|"
-                        r"straddling|riding|reverse_suspended|face_sitting|thigh_straddling|dominatrix|lap")
+# 여공남수 = 여성이 남성에게 삽입(페깅·스트랩온·남성 삽입당함) + femdom 계열만. 기승위·얼굴 위 앉기·무릎 위는 허용.
+FEM_TOP_RE = re.compile(r"femdom|dominatrix|assertive_female|male_penetrated|pegging|strap-on|strapon|prostate|"
+                        r"anal_fingering|anal_object_insertion|reverse_spitroast|penis_milking|prostate_milking")
 # 탑에게 금지 = 당하는 쪽 태그 / 바텀에게 금지 = 하는 쪽 태그
 TOP_RECV_RE = re.compile(r"cum_in|cum_on|cum_(?!drip_from_penis)|facial|bukkake|creampie|penetrated|_penetration|deepthroat|throat|"
                          r"swallow|fucked|pinned|restrained|bound|bondage|gagged|gag$|blindfold|leash|collar|cuffs|chained|shibari|rope|"
