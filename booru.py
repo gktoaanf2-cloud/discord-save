@@ -70,7 +70,8 @@ META_RE = re.compile(r"censor|uncensored|^hetero$|^\d(girl|boy)s?$|multiple_|sol
                      r"threesome|gangbang|group_sex|orgy|foursome|fivesome|spitroast|surrounded|incest|bisexual|femdom|"
                      r"^breasts$|large_breasts|huge_breasts|small_breasts|navel|^ass$|^tongue$|motion_lines|^blush$|^sweat$|^saliva$|"
                      r"bed_sheet|pillow$|^lying$|^sex$|^oral$|^licking$|^vaginal$|^anal$|^penis$|^pussy$|^nipples$|^testicles$|^anus$|"
-                     r"^nude$|^completely_nude$|^clothed_sex$|deep_skin|teamwork|cooperative|^hug$|^couple$|^kiss$")
+                     r"^nude$|^completely_nude$|^clothed_sex$|deep_skin|teamwork|cooperative|^hug$|^couple$|^kiss$|interracial|"
+                     r"dark-skinned|dark_skin|age_difference|size_difference|height_difference|onee|oyakodon|shimaidon|netorase")
 
 # 주제 → 수위 매핑 (mild=0 hot=1 fire=2 hell=3)
 TOPIC_LEVEL = {
@@ -143,7 +144,7 @@ class Booru:
         for i in ad:
             tag = n[i]
             topic = topics[t[i]] if 0 <= t[i] < len(topics) else ""
-            item = {"n": tag, "k": k[i] or nai(tag), "d": (desc[i] or "")[:140], "topic": topic}
+            item = {"n": tag, "k": (k[i] or nai(tag)).replace("_", " "), "d": (desc[i] or "")[:140], "topic": topic}
             if BAN_RE.search(tag):
                 continue
             if topic == VIOLENCE_TOPIC:
@@ -301,7 +302,7 @@ BOT_GIVE_RE = re.compile(r"grabbing_another|grabbing_from|hand_on_another|hands_
 RESTRAIN_RE = re.compile(r"bound|gagged|gag$|leash|collar|cuffs|blindfold|shibari|rope|chained|restrained|bondage|"
                          r"deepthroat|irrumatio|throat|asphyxiation|strangling|choking|pinned")
 PAIR = {
-    "HL": {"common_ban": FEM_TOP_RE, "top_ban": FEMALE_RE, "bot_ban": re.compile(r"^(penis|testicles|erection|foreskin|flaccid|half-erect|bulge|erection_under_clothes|precum|male_pubic_hair)$"),
+    "HL": {"common_ban": FEM_TOP_RE, "top_ban": re.compile(FEMALE_RE.pattern + r"|another's_penis|licking_penis|penis_grab|testicle_grab|handjob|fellatio"), "bot_ban": re.compile(r"^(penis|testicles|erection|foreskin|flaccid|half-erect|bulge|erection_under_clothes|precum|male_pubic_hair)$"),
            "top_k": "", "bot_k": "", "count": "2people, couple"},
     "BL": {"common_ban": FEMALE_RE, "top_ban": FEMALE_RE, "bot_ban": FEMALE_RE,
            "top_k": "", "bot_k": "", "count": "2people, couple"},
