@@ -27,7 +27,7 @@ BAN_RE = re.compile(
     r"bestiality|zoophilia|pokephilia|feral|knotting|sex_with_insects|animal_penis|teratophilia|pawpad|breeding_mount|furry|anthro|"
     r"guro|corpse|death|dead|decapitat|severed|dismember|intestine|organ|entrail|brain|amput|bisect|"
     r"cannibal|torture|suicide|self-harm|wrist_cut|impal|crucifix|execution|hanged|murder|headshot|"
-    r"crush|drown|strangl|asphyx|glasgow|exposed_muscle|flesh\b|"
+    r"crush|drown|glasgow|exposed_muscle|flesh\b|"
     r"scat|feces|poop|diaper|vomit|peeing|pee\b|urin|piss|"
     r"drugged|aphrodisiac|drunk|"
     r"necro|vore|inflation|giving_birth|pregnan|egg_laying|egg_implant|umbilical|birth|"
@@ -38,6 +38,8 @@ BAN_RE = re.compile(
 )
 # 성인 풀에서 제외 (페티시 분류 통째 + 폭력 계열은 /폭력 전용)
 FETISH_TOPICS = {"성인용 → 페티시", "성인용 → 생물"}
+# 폭력성 분류 중 야차(지옥맛)에도 허용: 브레스 컨트롤
+VIOL_ALLOW_RE = re.compile(r"^(asphyxiation|strangling|choking|breath_control|hand_on_another's_neck|hands_on_another's_neck)$")
 FETISH_ALLOW_RE = re.compile(r"^(bound|bdsm|bondage|restrained|cuffs|leash|gag|gagged|bound_wrists|shibari|bound_arms|ball_gag|"
                              r"bound_legs|chain_leash|bound_ankles|chained|cloth_gag|breast_bondage|tape_gag|bit_gag|ribbon_bondage|"
                              r"crotch_rope|frogtie|suspension|rope|blindfold|collar|handcuffs|arms_behind_back|tied_up|bound_together|"
@@ -146,6 +148,11 @@ class Booru:
                 continue
             if topic == VIOLENCE_TOPIC:
                 self.violence.append(item)
+                if VIOL_ALLOW_RE.search(tag):
+                    it2 = dict(item, level=3)
+                    self.tags.append(it2)
+                    self.by_tag[tag] = it2
+                    self.pool[3].append(it2)
                 continue
             if NONCON_RE.search(tag):
                 self.noncon.append(item)
@@ -278,8 +285,8 @@ FEMALE_RE = re.compile(r"pussy|vulva|labia|clitor|cameltoe|areola|breast|cleavag
 FEM_TOP_RE = re.compile(r"femdom|dominatrix|assertive_female|male_penetrated|pegging|strap-on|strapon|prostate|"
                         r"anal_fingering|anal_object_insertion|reverse_spitroast|penis_milking|prostate_milking")
 # 탑에게 금지 = 당하는 쪽 태그 / 바텀에게 금지 = 하는 쪽 태그
-TOP_RECV_RE = re.compile(r"cum_in|cum_on|cum_(?!drip_from_penis)|facial|bukkake|creampie|penetrated|_penetration|deepthroat|throat|"
-                         r"swallow|fucked|pinned|restrained|bound|bondage|gagged|gag$|blindfold|leash|collar|cuffs|chained|shibari|rope|"
+TOP_RECV_RE = re.compile(r"cum_in|cum_on|cum_(?!drip_from_penis)|facial|bukkake|creampie|penetrated|_penetration|"
+                         r"swallow|fucked|"
                          r"spanked|molest|ahegao|torogao|rolling_eyes|fucked_silly|pleading|trembling|pussy_juice|squirt|female_orgasm|"
                          r"orgasm|afterglow|after_|_aside|_lift$|_pull$|_slip$|_peek$|breasts_out|spread|presenting|legs_up|m_legs|on_back|"
                          r"all_fours|bent_over|arched|sheet_grab|pillow_grab|covering|embarrassed|scared|crying|tears|imminent|"
@@ -345,7 +352,7 @@ class Scene:
         it = self.B.by_tag.get(tag)
         if it is None:
             return False
-        if (it["topic"] in FETISH_TOPICS and not FETISH_ALLOW_RE.search(tag)) or it["topic"] == VIOLENCE_TOPIC:
+        if (it["topic"] in FETISH_TOPICS and not FETISH_ALLOW_RE.search(tag)) or (it["topic"] == VIOLENCE_TOPIC and not VIOL_ALLOW_RE.search(tag)):
             return False
         if it["topic"] == "성인용 → 신체" and tag not in BODY_ALLOW:
             return False
