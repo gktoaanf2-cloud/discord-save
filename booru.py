@@ -32,12 +32,16 @@ BAN_RE = re.compile(
     r"drugged|aphrodisiac|drunk|"
     r"necro|vore|inflation|giving_birth|pregnan|egg_laying|egg_implant|umbilical|birth|"
     r"cuntboy|newhalf|futa|yaoi|yuri|pointless_condom|price_list|paizuri_day|okamoto|condom_box|"
-    r"lactat|breastfeed|nursing|milk|slime|tentacle|bondage|bdsm|restrain|shibari|\brope|gag\b|gagged|leash|collar|cuff|"
+    r"slime|tentacle|strap-on|strapon|pegging|harness|sexy_no_jutsu|genderswap|crossdress|otoko_no_ko|trapb|"
     r"insect|worm|parasite|egg|ovipos|birth|hyper|gigantic|huge_|inflat|bulge_(?!press)|stomach_bulge|x-ray|cross-section|"
-    r"wedgie|smell|sniff|foot|feet|toe|armpit|hair_?job|tail_?job|onahole|fleshlight|strap-on|pegging|rimming|anilingus|prostate"
+    r"wedgie|smell|sniff|foot|feet|toe|armpit|hair_?job|tail_?job|onahole|fleshlight|rimming|anilingus|prostate"
 )
 # 성인 풀에서 제외 (페티시 분류 통째 + 폭력 계열은 /폭력 전용)
 FETISH_TOPICS = {"성인용 → 페티시", "성인용 → 생물"}
+FETISH_ALLOW_RE = re.compile(r"^(bound|bdsm|bondage|restrained|cuffs|leash|gag|gagged|bound_wrists|shibari|bound_arms|ball_gag|"
+                             r"bound_legs|chain_leash|bound_ankles|chained|cloth_gag|breast_bondage|tape_gag|bit_gag|ribbon_bondage|"
+                             r"crotch_rope|frogtie|suspension|rope|blindfold|collar|handcuffs|arms_behind_back|tied_up|bound_together|"
+                             r"shibari_over_clothes|naked_ribbon|bondage_outfit)$")
 VIOLENCE_TOPIC = "성인용 → 폭력성"
 # 비동의·강압 계열 → /폭력 전용
 NONCON_RE = re.compile(
@@ -146,10 +150,10 @@ class Booru:
             if NONCON_RE.search(tag):
                 self.noncon.append(item)
                 continue
-            if topic in FETISH_TOPICS:
+            if topic in FETISH_TOPICS and not FETISH_ALLOW_RE.search(tag):
                 self.fetish_count += 1
                 continue
-            lvl = TOPIC_LEVEL.get(topic)
+            lvl = 2 if topic in FETISH_TOPICS else TOPIC_LEVEL.get(topic)
             if lvl is None:
                 continue
             if topic == "성인용 → 신체" and tag not in BODY_ALLOW:
@@ -259,6 +263,30 @@ CLOTHED_RE = re.compile(r"clothed|_aside|_lift$|_pull$|_slip$|_peek$|through_clo
                         r"lingerie|garter|stocking|thighhigh|pantyhose|sweater|shirt|skirt|dress|uniform|apron|swimsuit|leotard")
 
 
+# 성별 조합: HL(남탑·여바텀) / BL(남·남) / GL(여·여)
+MALE_RE = re.compile(r"penis|testicle|erection|foreskin|flaccid|half-erect|\bbulge|precum|glans|balls|scrotum|"
+                     r"\bcum\b|cum_|_cum|facial|bukkake|ejaculat|creampie|fellatio|irrumatio|deepthroat|handjob|paizuri|"
+                     r"\bsex\b|^sex_|_sex$|vaginal|^anal$|anal_sex|penetrat|insertion|missionary|doggystyle|mating_press|"
+                     r"prone_bone|cowgirl|amazon|piledriver|suspended_congress|spitroast|full_nelson|wheelbarrow|lotus_position|"
+                     r"standing_sex|impregnat|condom|blowjob|oral$|licking_penis|male_")
+FEMALE_RE = re.compile(r"pussy|vulva|labia|clitor|cameltoe|areola|breast|cleavage|nipple_slip|vaginal|female_|lactat|milk|nursing|"
+                       r"breastfeed|paizuri|cervi|uterus|womb|cunnilingus|tribadism|scissor|bra\b|bikini|lingerie|babydoll|pasties|"
+                       r"maebari|panties|panty|thong|g-string|c-string|garter|bodystocking|dress|skirt|leotard|camisole|slingshot|"
+                       r"bridal|cupless|crotchless|stockings|thighhigh|pantyhose|heels|maid|nurse|frill|lace|buruma|girl|squirt|"
+                       r"pussy_juice|cum_in_pussy|creampie|sideboob|underboob|virgin_killer|naked_apron|sitting_on_face")
+FEM_TOP_RE = re.compile(r"cowgirl|girl_on_top|amazon|femdom|assertive_female|upright_straddle|sitting_on_(face|person|lap)|"
+                        r"straddling|riding|reverse_suspended|face_sitting|thigh_straddling|dominatrix|lap")
+PAIR = {
+    "HL": {"common_ban": FEM_TOP_RE, "top_ban": FEMALE_RE, "bot_ban": re.compile(r"^(penis|testicles|erection|foreskin|flaccid|half-erect|bulge|erection_under_clothes|precum|male_pubic_hair)$"),
+           "top_k": "남", "bot_k": "여", "count": "2people, couple, 1boy, 1girl"},
+    "BL": {"common_ban": FEMALE_RE, "top_ban": FEMALE_RE, "bot_ban": FEMALE_RE,
+           "top_k": "남", "bot_k": "남", "count": "2people, couple, 2boys"},
+    "GL": {"common_ban": MALE_RE, "top_ban": MALE_RE, "bot_ban": MALE_RE,
+           "top_k": "여", "bot_k": "여", "count": "2people, couple, 2girls"},
+}
+SOLO_BAN = {"HL": MALE_RE, "GL": MALE_RE, "BL": FEMALE_RE}
+
+
 def _posture_group(tag: str):
     for i, g in enumerate(POSTURE_GROUPS):
         if g.search(tag):
@@ -269,23 +297,39 @@ def _posture_group(tag: str):
 class Scene:
     """앵커 행위 + 연관 태그로 서로 맞물리는 장면 구성."""
 
-    def __init__(self, B: "Booru", level: int):
+    def __init__(self, B: "Booru", level: int, pair: str = "HL"):
         self.B, self.level = B, level
+        self.pair = pair if pair in PAIR else "HL"
+        self.role = "common"  # common | top | bot | solo
         self.used: set[str] = set()
         self.posture = None
         self.dress = None  # 'nude' | 'clothed'
 
+    def role_ban(self, tag: str) -> bool:
+        P = PAIR[self.pair]
+        if self.level < 2:
+            return bool(SOLO_BAN[self.pair].search(tag))
+        if P["common_ban"].search(tag) and self.role != "top" and self.pair == "HL":
+            return True
+        if self.role == "common" and P["common_ban"].search(tag):
+            return True
+        if self.role == "top" and (P["top_ban"].search(tag) or (self.pair == "HL" and FEM_TOP_RE.search(tag))):
+            return True
+        if self.role == "bot" and P["bot_ban"].search(tag):
+            return True
+        return False
+
     def ok(self, tag: str, top: bool = False) -> bool:
-        if tag in self.used or META_RE.search(tag) or BAN_RE.search(tag) or NONCON_RE.search(tag):
+        if tag in self.used or META_RE.search(tag) or BAN_RE.search(tag) or NONCON_RE.search(tag) or self.role_ban(tag):
             return False
         it = self.B.by_tag.get(tag)
         if it is None:
             return False
-        if it["topic"] in FETISH_TOPICS or it["topic"] == VIOLENCE_TOPIC:
+        if (it["topic"] in FETISH_TOPICS and not FETISH_ALLOW_RE.search(tag)) or it["topic"] == VIOLENCE_TOPIC:
             return False
         if it["topic"] == "성인용 → 신체" and tag not in BODY_ALLOW:
             return False
-        if top and not self.B.top_ok(tag):
+        if top and self.pair != "GL" and not self.B.top_ok(tag):
             return False
         if it.get("level", 0) > self.level:
             return False
@@ -311,7 +355,7 @@ class Scene:
         return self.B.by_tag[tag]
 
     def ext_ok(self, tag: str) -> bool:
-        if tag in self.used:
+        if tag in self.used or self.role_ban(tag):
             return False
         g = _posture_group(tag)
         if g is not None and self.posture is not None and g != self.posture:
@@ -378,52 +422,82 @@ T_FLUID = {"성인용 → 액체"}
 T_TOY = {"성인용 → 성인용품", "성인용 → 기타"}
 
 
-def roll_scene(B: "Booru", level: int, ext: dict | None = None) -> list[tuple[str, list[dict]]]:
-    """[(구역 라벨, items)] — level 0/1은 1인, 2/3은 커플(구도·행위·탑·바텀).
-    ext = {face, face_top, face_bot, pose2, place, extra}: 봇 내장 (tag,kor) 목록 (장면 검사 통과시켜 사용)."""
+def roll_scene(B: "Booru", level: int, ext: dict | None = None, pair: str = "HL") -> dict:
+    """{'solo':[...]} 또는 {'common':[...], 'top':[...], 'bot':[...]} (items).
+    ext = {face, face_top, face_bot, pose2, place, extra}: 봇 내장 (tag,kor) 목록."""
     ext = ext or {}
-    sc = Scene(B, level)
+    sc = Scene(B, level, pair)
     E = lambda key, k: sc.from_ext(ext.get(key, []), k)
     if level < 2:
+        sc.role = "solo"
         anchor = sc.from_pool(T_EXPO if level == 0 else T_POSE | T_EXPO, 1)
         a = anchor[0]["n"] if anchor else None
         wear = (sc.from_related(a, CLOTHED_RE, 1) if a else []) or sc.from_pool(T_WEAR | T_EXPO, 1)
-        pose = sc.from_related(a, POSE_RE, 1) if a else []
-        pose = pose or sc.from_pool(T_POSE, 1)
+        pose = (sc.from_related(a, POSE_RE, 1) if a else []) or sc.from_pool(T_POSE, 1)
         mood = sc.from_pool(T_MOOD, 1) if level == 1 else []
         body = sc.from_pool({"성인용 → 신체"}, 1) if level == 1 else []
-        face = E("face", 1)
-        return [("👤 인물", anchor + wear + body), ("🎬 구도", pose), ("💭 상태", mood + face), ("✨ 연출", E("place", 1) + E("extra", 1))]
-    # ── 커플 ──
+        return {"solo": anchor + wear + body + pose + mood + E("face", 1) + E("place", 1) + E("extra", 1)}
     hard = level >= 3
-    acts = sc.from_pool(T_ACT, 1, pattern=None if hard else re.compile(r"^(?!.*(double|triple|multiple|fisting|prolapse|insertion|large_insertion)).*$"))
-    if not acts:
-        return [("🔥 행위", [])]
-    a = acts[0]["n"]
-    # 구도: 앵커의 연관 자세 1 (없으면 풀)
-    pose = sc.from_related(a, POSE_RE, 1) or sc.from_pool(T_POSE, 1)
-    # 행위 보강: 연관 행위 1 (지옥맛 2)
-    acts += sc.from_related(a, re.compile(r".*"), 2 if hard else 1, limit=40) and [] or []
     heavy = re.compile(r"double|triple|multiple|fisting|prolapse|insertion|gaping")
+    sc.role = "common"
+    acts = sc.from_pool(T_ACT, 1, pattern=None if hard else re.compile(r"^(?!.*(double|triple|multiple|fisting|prolapse|insertion)).*$"))
+    if not acts:
+        return {"common": [], "top": [], "bot": []}
+    a = acts[0]["n"]
+    pose2 = E("pose2", 1)
+    pose = sc.from_related(a, POSE_RE, 1) or sc.from_pool(T_POSE, 1)
     more = [r["n"] for r in B.related(a, 40) if B.by_tag.get(r["n"], {}).get("topic") in T_ACT and (hard or not heavy.search(r["n"]))]
     acts += sc._take(more, 2 if hard else 1, False)
-    # 액체·토이: 연관 우선
     fluid = sc.from_related(a, FLUID_RE, 1) or sc.from_pool(T_FLUID | T_TOY, 1)
     if hard:
         fluid += sc.from_pool(T_TOY, 1)
-    # 탑: 연관 중 능동 태그 + 노출 1 (여성형 제외)
+    common = pose2 + pose + acts + fluid + E("place", 1) + E("extra", 1)
+    sc.role = "top"
     top = sc.from_related(a, TOP_RE, 2 if hard else 1, top=True)
     top += sc.from_pool(T_ACT | T_POSE, max(0, (2 if hard else 1) - len(top)), top=True, pattern=TOP_RE)
-    top += sc.from_related(a, re.compile(r"^(?!.*(nude)).*"), 0)  # no-op placeholder
     top_wear = sc.from_related(a, CLOTHED_RE, 1, top=True) or sc.from_pool(T_EXPO | T_WEAR, 1, top=True)
-    # 바텀: 연관 중 수동·반응 태그 + 노출 1
+    top_all = top_wear + top + E("face_top", 1)
+    sc.role = "bot"
     bot = sc.from_related(a, BOT_RE, 2 if hard else 1)
     bot += sc.from_pool(T_POSE | T_MOOD | T_EXPO, max(0, (2 if hard else 1) - len(bot)), pattern=BOT_RE)
     bot_wear = sc.from_related(a, CLOTHED_RE, 1) or sc.from_pool(T_EXPO | T_WEAR, 1)
-    mood = sc.from_related(a, re.compile(r".*"), 0)  # placeholder
-    mood = [sc.add(t) for t in [r["n"] for r in B.related(a, 60) if B.by_tag.get(r["n"], {}).get("topic") in T_MOOD and sc.ok(r["n"])][:1]]
-    pose2 = E("pose2", 1)
-    face_t = E("face_top", 1)
-    face_b = E("face_bot", 2 if hard else 1)
-    return [("🎬 구도", pose2 + pose), ("🔥 행위", acts + fluid), ("🔝 탑", top_wear + top + face_t),
-            ("🔻 바텀", bot_wear + bot + mood + face_b), ("✨ 연출", E("place", 1) + E("extra", 1))]
+    mood = sc._take([r["n"] for r in B.related(a, 60) if B.by_tag.get(r["n"], {}).get("topic") in T_MOOD], 1, False)
+    bot_all = bot_wear + bot + mood + E("face_bot", 2 if hard else 1)
+    return {"common": common, "top": top_all, "bot": bot_all}
+
+
+# ── NAI V5 정렬 순서 ──
+_CAT = [
+    (0, re.compile(r"^nsfw$")),
+    (1, re.compile(r"^(1person|2people|couple|\dgirls?|\dboys?)$")),
+    (2, re.compile(r"^(pov|from_above|from_below|from_behind|from_side|close-up|dutch_angle|upper_body|face_focus|foreshortening|cowboy_shot|full_body|cropped)$")),
+    (4, re.compile(r"ahegao|torogao|blush|tears|crying|open_mouth|tongue|drool|breathing|trembling|biting_lip|smile|grin|smug|face|expression|eyes|pupils|mouth|lips|embarrassed|pleading|scared|surprised|nervous|serious|moan|orgasm|fucked_silly|rolling_eyes|licking_lips")),
+    (5, re.compile(r"^looking_|eye_contact|gaze")),
+    (7, re.compile(r"vibrator|dildo|sex_toy|condom|lube|handcuff|anal_beads|whip|toy|bead|gag$|leash|collar|rope|chain|blindfold|cuffs")),
+    (8, re.compile(r"\bcum\b|cum_|_cum|juice|saliva|sweat|steam|heart|speech_bubble|motion_lines|sparkle|drip|overflow|squirt|milk|lactat|stain|puddle|trail|wet")),
+    (9, re.compile(r"^(bed|bathroom|shower|onsen|beach|locker_room|office|car_interior|pool|hotel_room|kitchen|couch|window|rooftop|tent|balcony|changing_room|elevator|bathtub|sauna|mirror|stairs|classroom|outdoors|indoors|night|rain)$")),
+    (11, re.compile(r"lighting|backlighting|candle|moonlight|neon|sunlight|spotlight|glow")),
+    (13, re.compile(r"magazine_cover|photoshoot|holographic|silk_sheets|rose_petals|pixel|sketch|monochrome")),
+]
+_CAT_TOPIC = {"성인용 → 노출": 6, "성인용 → 복장 및 악세서리": 6, "복장 및 악세서리 → 상태": 6, "성인용 → 신체": 6,
+              "성인용 → 자세": 3, "포즈 → 어필 자세": 3, "성인용 → 행위": 3, "성인용 → 액체": 8, "성인용 → 성인용품": 7,
+              "성인용 → 기타": 7, "성인용 → 상태 및 분위기 및 감정": 10, "성인용 → 페티시": 7}
+
+
+def cat_of(it: dict) -> int:
+    t = it["n"]
+    for c, rx in _CAT:
+        if rx.search(t):
+            return c
+    c = _CAT_TOPIC.get(it.get("topic", ""))
+    if c is not None:
+        return c
+    if POSE_RE.search(t) or TOP_RE.search(t) or BOT_RE.search(t):
+        return 3
+    if CLOTHED_RE.search(t) or NUDE_RE.search(t):
+        return 6
+    return 10
+
+
+def order(items: list[dict]) -> list[dict]:
+    return sorted(items, key=cat_of)  # stable

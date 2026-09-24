@@ -720,7 +720,8 @@ HELP_FIELDS = [
      "**연령제한 채널(야차방)에서만!** 음흉한 이몸이 NSFW 태그를 랜덤 조합해 준다.\n"
      "`상대:@누구` 붙이면 주사위 대결 → **이긴 놈이 그려온다!** 무승부면 둘 다.\n"
      "`수위:` 🍬순한맛(노출·의상) / 🌶️매운맛(+신체·자세, 기본) / 🔥불맛(2인 구도+행위·액체·토이) / ☠️지옥맛(불맛 2배)\n"
-     "`상세:True` 붙이면 태그마다 뜻 설명 + 연관 세부 태그까지! (단보루 1,300개 풀·한글 번역)"),
+     "`조합:` HL 남×여(기본) / BL / GL — 성별에 안 맞는 태그는 자동으로 뺀다. 여공남수 금지!\n"
+     "출력은 NAI V5 순서로 정렬해 **공용 / 탑 / 바텀 코드블록 따로**. `상세:True`면 태그 뜻 + 세부 태그까지!"),
     ("👑 관리자 전용",
      "`/주인 지정 채널 멤버` 방 주인 등록 → 그 사람은 어디서 /저장 쳐도 자기 방이 저장돼\n"
      "`/주인 목록` `/주인 해제` / `/전체저장` 카테고리 안 방 전부 한 번에 / `/이모지확대 켜기|끄기`"),
@@ -1281,12 +1282,22 @@ YACHA_WIN = [
 YACHA_TIE = ["무승부… 그럼 둘 다 그려와. 이몸은 두 배로 즐긴다…", "동점이냐… 좋아, 둘 다 붓 들어…"]
 
 
-def yacha_roll_booru(tier: str) -> list[tuple[str, list[dict]]]:
+def yacha_roll_booru(tier: str, pair: str = "HL") -> dict:
     """booru 앵커 기반 장면. 내장 표정·2인 자세·장소·연출은 장면 검사를 거쳐 합류."""
     lvl = Y_TIERS[tier][1]
     ext = {"face": Y_FACE, "face_top": Y_FACE_TOP, "face_bot": Y_FACE_BOT, "pose2": Y_POSE2, "place": Y_PLACE, "extra": Y_EXTRA}
-    rows = _booru.roll_scene(BOORU, lvl, ext)
-    return [(lab, items) for lab, items in rows if items]
+    return _booru.roll_scene(BOORU, lvl, ext, pair)
+
+
+NAI_DEFAULT = "fake magazine cover, holographic lighting, photoshoot"
+PAIR_LABEL = {"HL": "HL 남×여", "BL": "BL 남×남", "GL": "GL 여×여"}
+
+
+def nai_block(items: list[dict], head: str = "", tail: str = "") -> str:
+    """정렬 순서 적용 후 코드블록 문자열."""
+    tags = ", ".join(_booru.nai(x["n"]) for x in _booru.order(items))
+    line = ", ".join(t for t in (head, tags, tail) if t)
+    return "```\n" + line + "\n```"
 
 
 def yacha_detail(items: list[dict], k: int = 3) -> str:
@@ -1303,27 +1314,30 @@ def yacha_detail(items: list[dict], k: int = 3) -> str:
     return "\n".join(lines)
 
 
-def yacha_block(target: str, tier: str, n: int, detail: bool = False) -> str:
+def yacha_block(target: str, tier: str, n: int, detail: bool = False, pair: str = "HL") -> str:
     out = ""
     BOORU.maybe_refresh()
+    P = _booru.PAIR.get(pair, _booru.PAIR["HL"])
     for i in range(n):
         head = f"**#{i + 1}** " if n > 1 else ""
         if BOORU.ok:
-            rows = yacha_roll_booru(tier)
+            sc = yacha_roll_booru(tier, pair)
             if head:
-                out += f"\n> {head}"
+                out += f"\n{head}"
             allitems = []
-            alltags = []
-            for label, items in rows:
-                kor, tags = _booru.fmt(items)
-                allitems += items
-                alltags.append(tags)
-                out += f"\n> **{label}** {kor}"
-            out += "\n> ```\n> " + ", ".join(t for t in alltags if t) + "\n> ```"
+            if "solo" in sc:
+                items = sc["solo"]
+                allitems = items
+                out += f"\n**👤 1인** {_booru.fmt(items)[0]}\n" + nai_block(items, "nsfw, 1person", NAI_DEFAULT)
+            else:
+                allitems = sc["common"] + sc["top"] + sc["bot"]
+                out += f"\n**🔥 공용** {_booru.fmt(sc['common'])[0]}\n" + nai_block(sc["common"], "nsfw, " + P["count"], NAI_DEFAULT)
+                out += f"\n**🔝 탑({P['top_k']})** {_booru.fmt(sc['top'])[0]}\n" + nai_block(sc["top"])
+                out += f"\n**🔻 바텀({P['bot_k']})** {_booru.fmt(sc['bot'])[0]}\n" + nai_block(sc["bot"])
             if detail:
                 det = yacha_detail(allitems)
                 if det:
-                    out += "\n> **📖 상세**\n" + det
+                    out += "\n**📖 상세**\n" + det
             continue
         rows = yacha_roll(tier)
         if len(rows) == 1:
@@ -1373,7 +1387,7 @@ def violence_block(n: int, detail: bool) -> str:
         kor_v, t_v = _booru.fmt(vio)
         kor_n, t_n = _booru.fmt(non)
         kor_m, t_m = _booru.fmt(mood + site)
-        out += f"\n> {head}**🩸 유혈** {kor_v}\n> **⛓️ 강압** {kor_n}\n> **💭 상태·장소** {kor_m}\n> ```\n> {t_v}, {t_n}, {t_m}\n> ```"
+        out += f"\n{head}**🩸 유혈** {kor_v} · **⛓️ 강압** {kor_n} · **💭 상태·장소** {kor_m}\n" + nai_block(vio + non + mood + site, "nsfw")
         if detail:
             det = yacha_detail(vio + non)
             if det:
@@ -1419,11 +1433,14 @@ async def violence_cmd(inter: discord.Interaction, 상대: Optional[discord.Memb
 @client.tree.command(name="야차", description="[연령제한 채널 전용] 음흉한 이몸이 NSFW 태그를 뽑아준다")
 @app_commands.describe(
     상대="주사위 대결 상대. 이긴 쪽이 그려온다 (비우면 혼자 뽑기)",
-    수위="🍬순한맛 / 🌶️매운맛(기본) / 🔥불맛(2인·체위·토이) / ☠️지옥맛(불맛 2배)",
+    수위="🍬순한맛(노출·의상) / 🌶️매운맛(+신체·자세, 기본) / 🔥불맛(2인 구도+행위·액체·토이) / ☠️지옥맛(불맛 2배)",
+    조합="HL 남탑×여바텀(기본) / BL 남×남 / GL 여×여 — 성별에 안 맞는 태그 자동 배제",
     횟수="한 번에 뽑을 개수 (1~3)",
     상세="태그마다 뜻 설명 + 연관 세부 태그",
 )
-@app_commands.choices(수위=[
+@app_commands.choices(조합=[
+    app_commands.Choice(name="HL 남×여", value="HL"), app_commands.Choice(name="BL 남×남", value="BL"), app_commands.Choice(name="GL 여×여", value="GL"),
+], 수위=[
     app_commands.Choice(name="🌶️ 매운맛", value="hot"), app_commands.Choice(name="🍬 순한맛", value="mild"),
     app_commands.Choice(name="🔥 불맛", value="fire"), app_commands.Choice(name="☠️ 지옥맛", value="hell"),
 ])
@@ -1431,6 +1448,7 @@ async def yacha_cmd(
     inter: discord.Interaction,
     상대: Optional[discord.Member] = None,
     수위: Optional[app_commands.Choice[str]] = None,
+    조합: Optional[app_commands.Choice[str]] = None,
     횟수: app_commands.Range[int, 1, 3] = 1,
     상세: bool = False,
 ):
@@ -1440,11 +1458,12 @@ async def yacha_cmd(
         )
         return
     tier = 수위.value if 수위 else "hot"
-    label = Y_TIERS[tier][0]
+    pair = 조합.value if 조합 else "HL"
+    label = Y_TIERS[tier][0] + (f" · {PAIR_LABEL[pair]}" if Y_TIERS[tier][1] >= 2 else "")
     a = inter.user
     if not 상대 or 상대.id == a.id:
         body = f"# 😈 야차 {label} {random.choice(YACHA_KAO)}\n{a.mention} {random.choice(YACHA_INTRO)}"
-        body += yacha_block(a.mention, tier, 횟수, 상세)
+        body += yacha_block(a.mention, tier, 횟수, 상세, pair)
         body += f"\n{random.choice(YACHA_OUTRO)} {random.choice(YACHA_KAO)}"
         await send_long(inter, body)
         return
@@ -1456,8 +1475,8 @@ async def yacha_cmd(
     body = f"{head}\n{dice_line(a.mention, ra)}\n{dice_line(b.mention, rb)}\n"
     if ra == rb:
         body += f"# 🤝 {ra} : {rb} 무승부!\n{random.choice(YACHA_TIE)} {random.choice(YACHA_KAO)}"
-        body += f"\n{a.mention}" + yacha_block(a.mention, tier, 횟수, 상세)
-        body += f"\n{b.mention}" + yacha_block(b.mention, tier, 횟수, 상세)
+        body += f"\n{a.mention}" + yacha_block(a.mention, tier, 횟수, 상세, pair)
+        body += f"\n{b.mention}" + yacha_block(b.mention, tier, 횟수, 상세, pair)
     else:
         win = a if ra > rb else b
         if win.id == client.user.id:
@@ -1465,7 +1484,7 @@ async def yacha_cmd(
             win = a
         else:
             body += f"# 🏆 {win.display_name} 승리!\n{win.mention} {random.choice(YACHA_WIN)}"
-        body += yacha_block(win.mention, tier, 횟수, 상세)
+        body += yacha_block(win.mention, tier, 횟수, 상세, pair)
     body += f"\n{random.choice(YACHA_OUTRO)} {random.choice(YACHA_KAO)}"
     await send_long(inter, body, edit=True)
 
